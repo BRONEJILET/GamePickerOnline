@@ -187,7 +187,7 @@
 
             const endpoint = isLoginMode ? '/api/login' : '/api/register';
             try {
-                const response = await fetch(`http://localhost:8000${endpoint}`, {
+                const response = await fetch(`https://gamepickeronline.onrender.com${endpoint}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password })
                 });
                 const data = await response.json();
@@ -296,7 +296,7 @@
             document.getElementById('mainSubtitle').textContent = "Популярные игры и оценки критиков";
             const grid = document.getElementById('gamesGrid'); grid.innerHTML = '';
             document.getElementById('statusMessage').textContent = 'Загружаем...'; document.getElementById('statusMessage').classList.remove('hidden');
-            const res = await fetch('http://localhost:8000/api/top-games');
+            const res = await fetch('https://gamepickeronline.onrender.com/api/top-games');
             const games = await res.json();
             games.forEach(g => grid.innerHTML += createGameCardHTML(g));
             document.getElementById('statusMessage').classList.add('hidden');
@@ -307,7 +307,7 @@
             if (!input) return loadTopGames();
             document.getElementById('statusMessage').textContent = 'Ищем...'; document.getElementById('statusMessage').classList.remove('hidden');
             const grid = document.getElementById('gamesGrid'); grid.innerHTML = ''; 
-            const res = await fetch(`http://localhost:8000/api/search?query=${input}`);
+            const res = await fetch(`https://gamepickeronline.onrender.com/api/search?query=${input}`);
             const games = await res.json();
             if (games.error) return document.getElementById('statusMessage').textContent = games.error;
             games.forEach(g => grid.innerHTML += createGameCardHTML(g));
@@ -321,7 +321,7 @@
             document.getElementById('statusMessage').classList.remove('hidden');
             
             try {
-                const res = await fetch(`http://localhost:8000/api/games/${slug}`);
+                const res = await fetch(`https://gamepickeronline.onrender.com/api/games/${slug}`);
                 const game = await res.json();
                 if(game.error) return document.getElementById('statusMessage').textContent = game.error;
 
@@ -392,7 +392,7 @@
             btn.classList.add('heart-pop'); setTimeout(() => btn.classList.remove('heart-pop'), 300);
 
             try {
-                const res = await fetch('http://localhost:8000/api/favorites', { method: 'POST', headers: getHeaders(), body: JSON.stringify(currentGameData) });
+                const res = await fetch('https://gamepickeronline.onrender.com/api/favorites', { method: 'POST', headers: getHeaders(), body: JSON.stringify(currentGameData) });
                 const result = await res.json();
                 if (res.status === 401) { logout(); return showToast("Сессия истекла. Войдите снова", true); }
                 if (result.error) showToast(result.error, true);
@@ -417,7 +417,7 @@
             const grid = document.getElementById('gamesGrid'); grid.innerHTML = '';
 
             try {
-                const res = await fetch('http://localhost:8000/api/favorites', { headers: getHeaders() });
+                const res = await fetch('https://gamepickeronline.onrender.com/api/favorites', { headers: getHeaders() });
                 if (res.status === 401) { logout(); return showToast("Войдите в аккаунт", true); }
                 const games = await res.json();
                 if (games.length === 0) { document.getElementById('statusMessage').textContent = 'Ваш список пуст.'; document.getElementById('statusMessage').className = 'text-center font-semibold mb-8 text-xl text-gray-400'; return; }
@@ -427,7 +427,7 @@
 
         async function removeFromFavorites(slug) {
             try {
-                const res = await fetch(`http://localhost:8000/api/favorites/${slug}`, { method: 'DELETE', headers: getHeaders() });
+                const res = await fetch(`https://gamepickeronline.onrender.com/api/favorites/${slug}`, { method: 'DELETE', headers: getHeaders() });
                 const result = await res.json();
                 if (res.status === 401) return logout();
                 showToast(result.message); loadFavorites();
