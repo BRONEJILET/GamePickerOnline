@@ -6,8 +6,8 @@ import sqlite3
 from pydantic import BaseModel
 import hashlib
 import secrets
+import os
 import re
-# --- НОВЫЕ ИМПОРТЫ ДЛЯ GOOGLE LOGIN ---
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
@@ -24,6 +24,9 @@ app.add_middleware(
 RAWG_API_KEY = "9f57b2917ad04564baecb2015123510a" 
 GOOGLE_CLIENT_ID = "663265296931-ch1t13bftrfliu1um89jqnnr15q5p41p.apps.googleusercontent.com"
 
+# ==========================================
+# БАЗА ДАННЫХ (НОВАЯ СТРУКТУРА)
+# ==========================================
 def init_db():
     conn = sqlite3.connect("games.db")
     cursor = conn.cursor()
@@ -32,7 +35,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
             password_hash TEXT,
-            token TEXT
+            token TEXT,
+            avatar_url TEXT
         )
     """)
     cursor.execute("""
@@ -43,6 +47,7 @@ def init_db():
             name TEXT,
             image_url TEXT,
             metacritic_score INTEGER,
+            status TEXT DEFAULT 'В планах',
             FOREIGN KEY(user_id) REFERENCES users(id)
         )
     """)
@@ -51,21 +56,34 @@ def init_db():
 
 init_db()
 
+# ==========================================
+# ПРОДВИНУТАЯ БЕЗОПАСНОСТЬ ПАРОЛЕЙ (PBKDF2 + Salt)
+# ==========================================
 def hash_password(password: str):
-    return hashlib.sha256(password.encode()).hexdigest()
+    salt = os.urandom(16)
+    pwdhash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
+    return salt.hex() + ':' + pwdhash.hex()
+
+def verify_password(password: str, hashed_password: str):
+    try:
+        salt_hex, hash_hex = hashed_password.split(':')
+        salt = bytes.fromhex(salt_hex)
+        pwdhash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
+        return pwdhash.hex() == hash_hex
+    except:
+        return False
 
 def get_user_by_token(token: str):
-    if not token:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
+    if not token: raise HTTPException(status_code=401, detail="Необходима авторизация")
     conn = sqlite3.connect("games.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username FROM users WHERE token = ?", (token,))
+    cursor.execute("SELECT id, username, avatar_url FROM users WHERE token = ?", (token,))
     user = cursor.fetchone()
     conn.close()
-    if not user:
-        raise HTTPException(status_code=401, detail="Неверный или устаревший токен")
-    return {"id": user[0], "username": user[1]}
+    if not user: raise HTTPException(status_code=401, detail="Неверный или устаревший токен")
+    return {"id": user[0], "username": user[1], "avatar_url": user[2]}
 
+# --- МОДЕЛИ ---
 class UserAuth(BaseModel):
     username: str
     password: str
@@ -79,15 +97,24 @@ class FavoriteGame(BaseModel):
     image_url: str
     metacritic_score: int | None = None
 
-# --- АВТОРИЗАЦИЯ ---
+class UpdateStatus(BaseModel):
+    status: str
+
+# ==========================================
+# АВТОРИЗАЦИЯ
+# ==========================================
 @app.post("/api/register")
 def register(user: UserAuth):
+    if len(user.password) < 6: return {"error": "Пароль должен быть не менее 6 символов!"}
     conn = sqlite3.connect("games.db")
     cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (user.username, hash_password(user.password)))
+        # Стандартная аватарка для обычных пользователей
+        default_avatar = f"https://api.dicebear.com/7.x/bottts/svg?seed={user.username}"
+        cursor.execute("INSERT INTO users (username, password_hash, avatar_url) VALUES (?, ?, ?)", 
+                       (user.username, hash_password(user.password), default_avatar))
         conn.commit()
-        return {"message": "Регистрация успешна! Теперь вы можете войти."}
+        return {"message": "Регистрация успешна!"}
     except sqlite3.IntegrityError:
         return {"error": "Пользователь с таким именем уже существует!"}
     finally:
@@ -97,64 +124,71 @@ def register(user: UserAuth):
 def login(user: UserAuth):
     conn = sqlite3.connect("games.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM users WHERE username = ? AND password_hash = ?", (user.username, hash_password(user.password)))
+    cursor.execute("SELECT id, password_hash, avatar_url FROM users WHERE username = ?", (user.username,))
     row = cursor.fetchone()
-    if not row:
+    
+    # Проверяем пароль безопасным методом
+    if not row or not verify_password(user.password, row[1]):
         conn.close()
         return {"error": "Неверный логин или пароль"}
+        
     new_token = secrets.token_hex(16)
     cursor.execute("UPDATE users SET token = ? WHERE id = ?", (new_token, row[0]))
     conn.commit()
     conn.close()
-    return {"message": "Вход выполнен", "token": new_token, "username": user.username}
+    return {"message": "Вход выполнен", "token": new_token, "username": user.username, "avatar_url": row[2]}
 
-# --- НОВАЯ РУЧКА: ВХОД ЧЕРЕЗ GOOGLE ---
 @app.post("/api/google-login")
 def google_login(data: GoogleAuth):
     try:
-        # Проверяем токен через сервера Google
         idinfo = id_token.verify_oauth2_token(data.credential, google_requests.Request(), GOOGLE_CLIENT_ID)
         email = idinfo['email']
-        # Берем имя из Google, либо левую часть от email
-        name = idinfo.get('name', email.split('@')[0]) 
+        name = idinfo.get('name', email.split('@')[0])
+        avatar = idinfo.get('picture', f"https://api.dicebear.com/7.x/bottts/svg?seed={name}")
 
         conn = sqlite3.connect("games.db")
         cursor = conn.cursor()
-        
-        # Проверяем, есть ли уже такой пользователь
         cursor.execute("SELECT id FROM users WHERE username = ?", (email,))
         row = cursor.fetchone()
         
         if not row:
-            # Если нет - создаем нового (вместо пароля пишем заглушку)
-            cursor.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (email, "GOOGLE_AUTH_NO_PASSWORD"))
+            cursor.execute("INSERT INTO users (username, password_hash, avatar_url) VALUES (?, ?, ?)", 
+                           (email, "GOOGLE_AUTH_NO_PASSWORD", avatar))
             conn.commit()
             user_id = cursor.lastrowid
         else:
             user_id = row[0]
+            # Обновляем аватарку, если юзер сменил её в гугле
+            cursor.execute("UPDATE users SET avatar_url = ? WHERE id = ?", (avatar, user_id))
 
-        # Выдаем нашу внутреннюю сессию
         new_token = secrets.token_hex(16)
         cursor.execute("UPDATE users SET token = ? WHERE id = ?", (new_token, user_id))
         conn.commit()
         conn.close()
 
-        return {"message": "Вход через Google успешен!", "token": new_token, "username": name}
-
+        return {"message": "Вход через Google успешен!", "token": new_token, "username": name, "avatar_url": avatar}
     except ValueError:
         return {"error": "Недействительный токен Google!"}
 
-# --- ИЗБРАННОЕ ---
+@app.get("/api/user-info")
+def get_user_info(authorization: str = Header(None)):
+    token = authorization.replace("Bearer ", "") if authorization else None
+    user = get_user_by_token(token)
+    return {"username": user["username"], "avatar_url": user["avatar_url"]}
+
+# ==========================================
+# ИЗБРАННОЕ И СТАТУСЫ
+# ==========================================
 @app.get("/api/favorites")
 def get_favorites(authorization: str = Header(None)):
     token = authorization.replace("Bearer ", "") if authorization else None
     user = get_user_by_token(token)
     conn = sqlite3.connect("games.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT slug, name, image_url, metacritic_score FROM favorites WHERE user_id = ?", (user["id"],))
+    cursor.execute("SELECT slug, name, image_url, metacritic_score, status FROM favorites WHERE user_id = ?", (user["id"],))
     rows = cursor.fetchall()
     conn.close()
-    return [{"slug": r[0], "name": r[1], "image_url": r[2], "metacritic_score": r[3]} for r in rows]
+    return [{"slug": r[0], "name": r[1], "image_url": r[2], "metacritic_score": r[3], "status": r[4]} for r in rows]
 
 @app.post("/api/favorites")
 def add_favorite(game: FavoriteGame, authorization: str = Header(None)):
@@ -166,7 +200,8 @@ def add_favorite(game: FavoriteGame, authorization: str = Header(None)):
     if cursor.fetchone():
         conn.close()
         return {"error": "Эта игра уже есть в вашем списке!"}
-    cursor.execute("INSERT INTO favorites (user_id, slug, name, image_url, metacritic_score) VALUES (?, ?, ?, ?, ?)", (user["id"], game.slug, game.name, game.image_url, game.metacritic_score))
+    cursor.execute("INSERT INTO favorites (user_id, slug, name, image_url, metacritic_score, status) VALUES (?, ?, ?, ?, ?, 'В планах')", 
+                   (user["id"], game.slug, game.name, game.image_url, game.metacritic_score))
     conn.commit()
     conn.close()
     return {"message": "Игра успешно добавлена в избранное!"}
@@ -182,6 +217,20 @@ def remove_favorite(game_slug: str, authorization: str = Header(None)):
     conn.close()
     return {"message": "Игра удалена из избранного."}
 
+@app.patch("/api/favorites/{game_slug}/status")
+def update_status(game_slug: str, data: UpdateStatus, authorization: str = Header(None)):
+    token = authorization.replace("Bearer ", "") if authorization else None
+    user = get_user_by_token(token)
+    conn = sqlite3.connect("games.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE favorites SET status = ? WHERE user_id = ? AND slug = ?", (data.status, user["id"], game_slug))
+    conn.commit()
+    conn.close()
+    return {"message": "Статус обновлен!"}
+
+# ==========================================
+# RAWG & STEAM
+# ==========================================
 @app.get("/")
 def read_root(): return {"message": "Сервер работает"}
 
@@ -229,7 +278,7 @@ def get_game_info(game_slug: str):
                     steam_id = match.group(1)
                     break
     except Exception as e:
-        print(f"Ошибка получения магазинов: {e}")
+        pass
 
     if steam_id:
         try:
