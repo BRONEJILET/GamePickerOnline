@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GamePickerOnline</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        .fade-in { animation: fadeIn 0.4s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .game-card:hover { transform: translateY(-5px); transition: transform 0.3s ease; }
+        .heart-pop { animation: pop 0.3s ease-in-out; }
+        @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.3); } 100% { transform: scale(1); } }
+        #toast { transition: opacity 0.3s, transform 0.3s; }
+        .modal-bg { background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); }
+        #lightbox { backdrop-filter: blur(10px); }
+        .lightbox-img-enter { transform: scale(0.9); opacity: 0; }
+        .lightbox-img-active { transform: scale(1); opacity: 1; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen font-sans pb-12 relative">
+
+    <div id="toast" class="fixed top-5 right-5 bg-purple-600 text-white px-6 py-3 rounded-xl shadow-lg shadow-purple-500/50 font-semibold opacity-0 translate-y-[-20px] pointer-events-none z-50">Уведомление</div>
+
+    <div id="authModal" class="fixed inset-0 modal-bg hidden flex items-center justify-center z-50 fade-in">
+        <div class="bg-gray-800 p-8 rounded-3xl shadow-2xl border border-gray-700 w-full max-w-md relative text-center">
+            <button onclick="closeAuthModal()" class="absolute top-4 right-5 text-gray-400 hover:text-white text-2xl">✕</button>
+            <h2 id="authTitle" class="text-3xl font-bold mb-6 text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">Вход в аккаунт</h2>
+            
+            <input type="text" id="authUsername" placeholder="Логин" class="w-full px-4 py-3 mb-4 rounded-xl bg-gray-900 border border-gray-700 text-white focus:outline-none focus:border-purple-500 text-left">
+            <input type="password" id="authPassword" placeholder="Пароль" class="w-full px-4 py-3 mb-6 rounded-xl bg-gray-900 border border-gray-700 text-white focus:outline-none focus:border-purple-500 text-left">
+            <button id="authBtn" onclick="submitAuth()" class="w-full py-3 bg-purple-600 hover:bg-purple-700 rounded-xl font-bold text-lg shadow-lg shadow-purple-500/30 transition-colors mb-4">Войти</button>
+            
+            <p class="text-center text-gray-400 text-sm mb-4">
+                <span id="authToggleText">Нет аккаунта?</span> 
+                <button onclick="toggleAuthMode()" id="authToggleBtn" class="text-purple-400 hover:text-purple-300 font-semibold ml-1">Зарегистрироваться</button>
+            </p>
+
+            <div class="flex items-center my-4">
+                <div class="flex-grow border-t border-gray-600"></div>
+                <span class="px-3 text-gray-400 text-sm font-semibold uppercase">или</span>
+                <div class="flex-grow border-t border-gray-600"></div>
+            </div>
+
+            <div id="g_id_onload"
+                 data-client_id="663265296931-ch1t13bftrfliu1um89jqnnr15q5p41p.apps.googleusercontent.com"
+                 data-context="signin"
+                 data-ux_mode="popup"
+                 data-callback="handleGoogleLogin"
+                 data-auto_prompt="false">
+            </div>
+            
+            <div class="flex justify-center">
+                <div class="g_id_signin"
+                     data-type="standard"
+                     data-shape="rectangular"
+                     data-theme="filled_black"
+                     data-text="signin_with"
+                     data-size="large"
+                     data-logo_alignment="left">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="lightbox" class="fixed inset-0 bg-black/95 z-[100] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <button onclick="closeLightbox()" class="absolute top-5 right-6 text-white/50 hover:text-white text-5xl font-light transition-colors z-20 select-none">&times;</button>
+        <button onclick="prevScreenshot(event)" class="absolute left-2 md:left-8 text-white/30 hover:text-white text-6xl font-light transition-colors select-none p-4 z-20">&lsaquo;</button>
+        <img id="lightboxImage" src="" class="max-h-[90vh] max-w-[85vw] object-contain shadow-2xl rounded-xl z-10 lightbox-img-enter mx-auto">
+        <button onclick="nextScreenshot(event)" class="absolute right-2 md:right-8 text-white/30 hover:text-white text-6xl font-light transition-colors select-none p-4 z-20">&rsaquo;</button>
+        <div id="lightboxCounter" class="absolute bottom-6 text-white/50 font-semibold tracking-widest text-sm z-20"></div>
+    </div>
+
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+            <h1 class="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 cursor-pointer" onclick="returnToMain()">
+                GamePickerOnline
+            </h1>
+            <div class="flex items-center gap-3">
+                <button onclick="loadFavorites()" class="px-5 py-2 bg-gray-800 border border-gray-700 hover:bg-gray-700 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg">
+                    <span>⭐</span> Избранное
+                </button>
+                <div id="userPanel" class="flex items-center gap-3 border-l border-gray-700 pl-3">
+                    <button onclick="openAuthModal('login')" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold transition-colors shadow-lg shadow-blue-500/30">Войти</button>
+                </div>
+            </div>
+        </div>
+        
+        <p id="mainSubtitle" class="text-gray-400 text-center mb-10 text-lg">Популярные игры и оценки критиков</p>
+
+        <div id="mainView" class="fade-in">
+            <div id="backToMainContainer" class="hidden flex justify-center mb-8">
+                <button onclick="returnToMain()" class="px-6 py-2 bg-gray-800 border border-gray-700 hover:bg-gray-700 text-purple-400 hover:text-purple-300 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg">
+                    ← Вернуться к списку игр
+                </button>
+            </div>
+
+            <div id="searchBlock" class="flex gap-4 mb-12 max-w-3xl mx-auto">
+                <input type="text" id="gameInput" placeholder="Введите название игры (напр. gta, witcher, doom)" class="w-full px-4 py-3 rounded-xl bg-gray-800 border border-gray-700 text-white focus:outline-none focus:border-purple-500 transition-colors shadow-lg">
+                <button onclick="searchGame()" class="px-8 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 font-bold transition-colors shadow-lg shadow-purple-500/30">Найти</button>
+            </div>
+            <div id="statusMessage" class="text-center text-purple-400 font-semibold mb-8 text-xl">Загружаем популярные игры...</div>
+            <div id="gamesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+        </div>
+
+        <div id="detailView" class="hidden fade-in bg-gray-800 rounded-3xl overflow-hidden shadow-2xl border border-gray-700 max-w-4xl mx-auto">
+            <button onclick="closeGameDetails()" class="absolute mt-4 ml-4 px-4 py-2 bg-black/50 hover:bg-black/80 rounded-lg text-white font-semibold backdrop-blur-sm transition-all z-10">← Назад</button>
+            <div class="relative"><img id="detailImage" src="" alt="Cover" class="w-full h-80 object-cover border-b border-gray-700"></div>
+            
+            <div class="p-8">
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h2 id="detailTitle" class="text-4xl font-bold mb-2">Название Игры</h2>
+                        <p id="detailDevelopers" class="text-purple-400 font-medium">Студия: </p>
+                        <p id="detailDate" class="text-gray-400 text-sm mt-1">Дата выхода: </p>
+                    </div>
+                    <div id="detailMeta" class="flex-shrink-0 flex items-center justify-center w-16 h-16 rounded-full font-bold text-2xl border-4 shadow-lg bg-gray-900/50"></div>
+                </div>
+
+                <div class="mb-8">
+                    <h3 class="text-xl font-semibold mb-3 border-b border-gray-700 pb-2">Описание</h3>
+                    <p id="detailDescription" class="text-gray-300 leading-relaxed whitespace-pre-line"></p>
+                </div>
+                
+                <div id="pcRequirements" class="mb-8 hidden">
+                    <h3 class="text-xl font-semibold mb-3 border-b border-gray-700 pb-2 text-blue-400">Системные требования (PC)</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-gray-900/50 p-5 rounded-xl border border-gray-700 shadow-inner">
+                            <h4 class="font-bold text-gray-300 mb-2">Минимальные:</h4>
+                            <p id="detailReqMin" class="text-sm text-gray-400 whitespace-pre-line leading-relaxed"></p>
+                        </div>
+                        <div class="bg-gray-900/50 p-5 rounded-xl border border-gray-700 shadow-inner">
+                            <h4 class="font-bold text-gray-300 mb-2">Рекомендуемые:</h4>
+                            <p id="detailReqRec" class="text-sm text-gray-400 whitespace-pre-line leading-relaxed"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="screenshotsBlock" class="mb-8 hidden">
+                    <h3 class="text-xl font-semibold mb-3 border-b border-gray-700 pb-2 text-blue-400">Скриншоты</h3>
+                    <div id="screenshotsContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
+                </div>
+
+                <div id="steamReviewsBlock" class="mb-8 hidden">
+                    <h3 class="text-xl font-semibold mb-3 border-b border-gray-700 pb-2 text-blue-400">Отзывы игроков (Steam)</h3>
+                    <div id="steamReviewsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                </div>
+                
+                <div class="flex flex-col md:flex-row justify-between items-center gap-6 mt-10">
+                    <div><h3 class="text-sm text-gray-400 uppercase tracking-wider mb-2">Платформы</h3><div id="detailPlatforms" class="flex flex-wrap gap-2"></div></div>
+                    
+                    <div class="flex flex-wrap gap-3 mt-4 md:mt-0">
+                        <button id="btnFavorite" onclick="addToFavorites()" class="px-6 py-3 bg-pink-600 hover:bg-pink-700 rounded-xl font-bold transition-colors shadow-lg shadow-pink-500/30 whitespace-nowrap flex items-center gap-2">
+                            <span>🤍</span> В избранное
+                        </button>
+                        
+                        <a id="detailMetacritic" href="#" target="_blank" class="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-gray-900 rounded-xl font-bold transition-colors shadow-lg shadow-yellow-500/30 whitespace-nowrap hidden">
+                            Metacritic ↗
+                        </a>
+
+                        <a id="detailWebsite" href="#" target="_blank" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition-colors shadow-lg shadow-blue-500/30 whitespace-nowrap hidden">
+                            Сайт ↗
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // УМНАЯ ССЫЛКА НА API
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const API_BASE = isLocal ? 'http://localhost:8000' : 'https://gamepickeronline.onrender.com';
+
+        let currentGameData = null;
+        let isLoginMode = true; 
+        let currentScreenshots = [];
+        let currentScreenshotIndex = 0;
+
+        function checkAuth() {
+            const token = localStorage.getItem('token');
+            const username = localStorage.getItem('username');
+            const userPanel = document.getElementById('userPanel');
+            if (token && username) {
+                userPanel.innerHTML = `<span class="text-gray-300 font-medium hidden md:inline">Привет, <span class="text-white">${username}</span>!</span><button onclick="logout()" class="px-4 py-2 bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white rounded-xl font-semibold transition-colors">Выйти</button>`;
+            } else {
+                userPanel.innerHTML = `<button onclick="openAuthModal('login')" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold transition-colors shadow-lg shadow-blue-500/30">Войти</button>`;
+            }
+        }
+
+        function openAuthModal(mode) {
+            document.getElementById('authModal').classList.remove('hidden');
+            if (mode === 'register') { isLoginMode = false; toggleAuthMode(true); } 
+            else { isLoginMode = true; toggleAuthMode(true); }
+        }
+
+        function closeAuthModal() {
+            document.getElementById('authModal').classList.add('hidden');
+            document.getElementById('authUsername').value = ''; document.getElementById('authPassword').value = '';
+        }
+
+        function toggleAuthMode(forceUpdate = false) {
+            if (!forceUpdate) isLoginMode = !isLoginMode;
+            document.getElementById('authTitle').textContent = isLoginMode ? 'Вход в аккаунт' : 'Создать аккаунт';
+            document.getElementById('authBtn').textContent = isLoginMode ? 'Войти' : 'Зарегистрироваться';
+            document.getElementById('authToggleText').textContent = isLoginMode ? 'Нет аккаунта?' : 'Уже есть аккаунт?';
+            document.getElementById('authToggleBtn').textContent = isLoginMode ? 'Зарегистрироваться' : 'Войти';
+            
+            // Прячем Google кнопку при регистрации, чтобы не путать
+            const googleBlock = document.querySelector('.g_id_signin');
+            if (googleBlock) googleBlock.style.display = isLoginMode ? 'block' : 'none';
+        }
+
+        async function submitAuth() {
+            const username = document.getElementById('authUsername').value.trim();
+            const password = document.getElementById('authPassword').value.trim();
+            if (!username || !password) return showToast("Заполните все поля", true);
+
+            const endpoint = isLoginMode ? '/api/login' : '/api/register';
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+                if (data.error) showToast(data.error, true);
+                else {
+                    showToast(data.message);
+                    if (isLoginMode) {
+                        localStorage.setItem('token', data.token); localStorage.setItem('username', data.username);
+                        closeAuthModal(); checkAuth();
+                    } else toggleAuthMode();
+                }
+            } catch (error) { showToast("Ошибка сервера", true); }
+        }
+
+        // --- НОВАЯ ФУНКЦИЯ ДЛЯ ОБРАБОТКИ ОТВЕТА ОТ GOOGLE ---
+        async function handleGoogleLogin(response) {
+            try {
+                const res = await fetch(`${API_BASE}/api/google-login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ credential: response.credential })
+                });
+                const data = await res.json();
+                if (data.error) showToast(data.error, true);
+                else {
+                    showToast(data.message);
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('username', data.username);
+                    closeAuthModal();
+                    checkAuth();
+                }
+            } catch (error) {
+                showToast("Ошибка связи с сервером", true);
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('token'); localStorage.removeItem('username');
+            checkAuth(); showToast("Вы вышли из аккаунта"); returnToMain(); 
+        }
+
+        function getHeaders() {
+            const token = localStorage.getItem('token');
+            return token ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` } : { 'Content-Type': 'application/json' };
+        }
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `fixed top-5 right-5 px-6 py-3 rounded-xl shadow-lg font-semibold transition-all z-50 ${isError ? 'bg-red-500 shadow-red-500/50' : 'bg-green-500 shadow-green-500/50'}`;
+            toast.style.opacity = '1'; toast.style.transform = 'translateY(0)';
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(-20px)'; }, 3000);
+        }
+
+        function getScoreColorClass(s) { return !s ? 'border-gray-500 text-gray-500' : s>=80 ? 'border-green-500 text-green-500' : s>=50 ? 'border-yellow-500 text-yellow-500' : 'border-red-500 text-red-500'; }
+
+        function createGameCardHTML(game, isFav = false) {
+            const scoreClass = getScoreColorClass(game.metacritic_score);
+            const scoreText = game.metacritic_score || 'N/A';
+            const deleteBtn = isFav ? `<button onclick="event.stopPropagation(); removeFromFavorites('${game.slug}')" class="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white w-8 h-8 rounded-full font-bold flex items-center justify-center shadow-lg z-10 transition-colors">✕</button>` : '';
+            return `<div onclick="openGameDetails('${game.slug}')" class="relative game-card fade-in bg-gray-800 rounded-2xl overflow-hidden shadow-lg border border-gray-700 flex flex-col cursor-pointer group">
+                    ${deleteBtn}<div class="overflow-hidden h-48"><img src="${game.image_url}" class="w-full h-full object-cover border-b border-gray-700 group-hover:scale-105 transition-transform duration-500"></div><div class="p-5 flex flex-col flex-grow"><div class="flex justify-between items-start mb-3"><h2 class="text-xl font-bold leading-tight pr-2">${game.name}</h2><div class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full font-bold text-sm border-2 ${scoreClass}">${scoreText}</div></div></div></div>`;
+        }
+
+        function openLightbox(index) {
+            currentScreenshotIndex = index;
+            const lb = document.getElementById('lightbox');
+            const lbImg = document.getElementById('lightboxImage');
+            updateLightboxContent();
+            lb.classList.remove('hidden');
+            setTimeout(() => {
+                lb.classList.remove('opacity-0');
+                lbImg.classList.remove('lightbox-img-enter');
+                lbImg.classList.add('lightbox-img-active');
+            }, 10);
+            document.body.style.overflow = 'hidden'; 
+        }
+
+        function closeLightbox() {
+            const lb = document.getElementById('lightbox');
+            const lbImg = document.getElementById('lightboxImage');
+            lb.classList.add('opacity-0');
+            lbImg.classList.remove('lightbox-img-active');
+            lbImg.classList.add('lightbox-img-enter');
+            setTimeout(() => { lb.classList.add('hidden'); document.body.style.overflow = ''; }, 300);
+        }
+
+        function prevScreenshot(e) { if (e) e.stopPropagation(); currentScreenshotIndex = (currentScreenshotIndex - 1 + currentScreenshots.length) % currentScreenshots.length; updateLightboxContent(); }
+        function nextScreenshot(e) { if (e) e.stopPropagation(); currentScreenshotIndex = (currentScreenshotIndex + 1) % currentScreenshots.length; updateLightboxContent(); }
+
+        function updateLightboxContent() {
+            const lbImg = document.getElementById('lightboxImage');
+            lbImg.style.opacity = '0.5';
+            setTimeout(() => lbImg.style.opacity = '1', 50);
+            lbImg.src = currentScreenshots[currentScreenshotIndex];
+            document.getElementById('lightboxCounter').textContent = `${currentScreenshotIndex + 1} / ${currentScreenshots.length}`;
+        }
+
+        document.addEventListener('keydown', (e) => {
+            const lb = document.getElementById('lightbox');
+            if (!lb.classList.contains('hidden')) {
+                if (e.key === 'Escape') closeLightbox();
+                if (e.key === 'ArrowLeft') prevScreenshot();
+                if (e.key === 'ArrowRight') nextScreenshot();
+            }
+        });
+
+        function returnToMain() {
+            document.getElementById('detailView').classList.add('hidden');
+            document.getElementById('mainView').classList.remove('hidden');
+            document.getElementById('backToMainContainer').classList.add('hidden');
+            document.getElementById('searchBlock').classList.remove('hidden');
+            loadTopGames();
+        }
+
+        async function loadTopGames() {
+            document.getElementById('mainSubtitle').textContent = "Популярные игры и оценки критиков";
+            const grid = document.getElementById('gamesGrid'); grid.innerHTML = '';
+            document.getElementById('statusMessage').textContent = 'Загружаем...'; document.getElementById('statusMessage').classList.remove('hidden');
+            const res = await fetch(`${API_BASE}/api/top-games`);
+            const games = await res.json();
+            games.forEach(g => grid.innerHTML += createGameCardHTML(g));
+            document.getElementById('statusMessage').classList.add('hidden');
+        }
+
+        async function searchGame() {
+            const input = document.getElementById('gameInput').value.trim();
+            if (!input) return loadTopGames();
+            document.getElementById('statusMessage').textContent = 'Ищем...'; document.getElementById('statusMessage').classList.remove('hidden');
+            const grid = document.getElementById('gamesGrid'); grid.innerHTML = ''; 
+            const res = await fetch(`${API_BASE}/api/search?query=${input}`);
+            const games = await res.json();
+            if (games.error) return document.getElementById('statusMessage').textContent = games.error;
+            games.forEach(g => grid.innerHTML += createGameCardHTML(g));
+            document.getElementById('statusMessage').textContent = `Результаты по запросу "${input}"`; document.getElementById('statusMessage').className = 'text-center font-semibold mb-8 text-xl text-green-400';
+        }
+
+        async function openGameDetails(slug) {
+            document.getElementById('mainView').classList.add('hidden');
+            document.getElementById('statusMessage').textContent = 'Загружаем информацию, скриншоты и отзывы...'; 
+            document.getElementById('statusMessage').className = 'text-center font-semibold mb-8 text-xl text-purple-400 fade-in'; 
+            document.getElementById('statusMessage').classList.remove('hidden');
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/games/${slug}`);
+                const game = await res.json();
+                if(game.error) return document.getElementById('statusMessage').textContent = game.error;
+
+                currentGameData = { slug, name: game.name, image_url: game.image_url, metacritic_score: game.metacritic_score };
+
+                document.getElementById('detailTitle').textContent = game.name; document.getElementById('detailImage').src = game.image_url; document.getElementById('detailDate').textContent = `Дата выхода: ${game.release_date || 'Неизвестна'}`;
+                document.getElementById('detailDevelopers').textContent = `Студия: ${game.developers && game.developers.length ? game.developers.join(', ') : 'Неизвестно'}`;
+                document.getElementById('detailDescription').textContent = game.description || 'Описание отсутствует.';
+
+                const reqSection = document.getElementById('pcRequirements');
+                if (game.pc_minimum !== "Нет данных" || game.pc_recommended !== "Нет данных") {
+                    document.getElementById('detailReqMin').textContent = game.pc_minimum.replace(/Minimum:/gi, '').trim(); document.getElementById('detailReqRec').textContent = game.pc_recommended.replace(/Recommended:/gi, '').trim();
+                    reqSection.classList.remove('hidden');
+                } else reqSection.classList.add('hidden'); 
+
+                const scrBlock = document.getElementById('screenshotsBlock');
+                const scrCont = document.getElementById('screenshotsContainer');
+                scrCont.innerHTML = '';
+                if (game.screenshots && game.screenshots.length > 0) {
+                    currentScreenshots = game.screenshots; 
+                    game.screenshots.forEach((imgUrl, index) => {
+                        scrCont.innerHTML += `<img src="${imgUrl}" class="w-full h-32 object-cover rounded-xl border border-gray-700 hover:border-purple-500 hover:scale-105 transition-all cursor-pointer shadow-lg" onclick="openLightbox(${index})" alt="Скриншот игры">`;
+                    });
+                    scrBlock.classList.remove('hidden');
+                } else { currentScreenshots = []; scrBlock.classList.add('hidden'); }
+
+                const reviewsBlock = document.getElementById('steamReviewsBlock');
+                const reviewsCont = document.getElementById('steamReviewsContainer');
+                reviewsCont.innerHTML = ''; 
+                if (game.steam_reviews && game.steam_reviews.length > 0) {
+                    game.steam_reviews.forEach(rev => {
+                        const isGood = rev.voted_up;
+                        const icon = isGood ? '👍' : '👎';
+                        const color = isGood ? 'text-green-400' : 'text-red-400';
+                        const borderColor = isGood ? 'border-green-500/30' : 'border-red-500/30';
+                        reviewsCont.innerHTML += `<div class="bg-gray-900/50 p-5 rounded-xl border ${borderColor} shadow-inner"><div class="font-bold mb-3 ${color}">${icon} ${isGood ? 'Рекомендую' : 'Не рекомендую'}</div><p class="text-gray-300 text-sm italic leading-relaxed">"${rev.review}"</p></div>`;
+                    });
+                    reviewsBlock.classList.remove('hidden');
+                } else reviewsBlock.classList.add('hidden');
+
+                const metaScore = document.getElementById('detailMeta'); metaScore.textContent = game.metacritic_score || 'N/A'; metaScore.className = `flex-shrink-0 flex items-center justify-center w-16 h-16 rounded-full font-bold text-2xl border-4 shadow-lg bg-gray-900/50 ${getScoreColorClass(game.metacritic_score)}`;
+                const platCont = document.getElementById('detailPlatforms'); platCont.innerHTML = '';
+                if (game.platforms) game.platforms.forEach(p => platCont.innerHTML += `<span class="px-4 py-1.5 bg-gray-700 text-xs font-semibold rounded-full border border-gray-600 shadow-sm">${p}</span>`);
+
+                const webBtn = document.getElementById('detailWebsite');
+                if (game.website) { webBtn.href = game.website; webBtn.classList.remove('hidden'); } else webBtn.classList.add('hidden');
+
+                const metaBtn = document.getElementById('detailMetacritic');
+                if (game.metacritic_url) { metaBtn.href = game.metacritic_url; metaBtn.classList.remove('hidden'); } else metaBtn.classList.add('hidden');
+
+                const favBtn = document.getElementById('btnFavorite');
+                favBtn.innerHTML = '<span>🤍</span> В избранное'; favBtn.classList.remove('bg-green-600', 'hover:bg-green-700'); favBtn.classList.add('bg-pink-600', 'hover:bg-pink-700');
+
+                document.getElementById('statusMessage').classList.add('hidden'); document.getElementById('detailView').classList.remove('hidden'); window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch (e) { document.getElementById('statusMessage').textContent = 'Ошибка загрузки.'; }
+        }
+
+        async function addToFavorites() {
+            if (!localStorage.getItem('token')) { showToast("Сначала войдите в аккаунт!", true); openAuthModal('login'); return; }
+            if (!currentGameData) return;
+            const btn = document.getElementById('btnFavorite');
+            btn.classList.add('heart-pop'); setTimeout(() => btn.classList.remove('heart-pop'), 300);
+
+            try {
+                const res = await fetch(`${API_BASE}/api/favorites`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(currentGameData) });
+                const result = await res.json();
+                if (res.status === 401) { logout(); return showToast("Сессия истекла. Войдите снова", true); }
+                if (result.error) showToast(result.error, true);
+                else {
+                    showToast(result.message);
+                    btn.innerHTML = '<span>❤️</span> В избранном'; btn.classList.remove('bg-pink-600', 'hover:bg-pink-700'); btn.classList.add('bg-green-600', 'hover:bg-green-700');
+                }
+            } catch (e) { showToast("Ошибка БД", true); }
+        }
+
+        async function loadFavorites() {
+            if (!localStorage.getItem('token')) { showToast("Войдите, чтобы посмотреть избранное", true); openAuthModal('login'); return; }
+            closeGameDetails(); 
+            document.getElementById('searchBlock').classList.add('hidden'); 
+            document.getElementById('backToMainContainer').classList.remove('hidden');
+            document.getElementById('mainSubtitle').textContent = "Ваши сохраненные игры"; 
+            document.getElementById('statusMessage').textContent = 'Загружаем...'; 
+            document.getElementById('statusMessage').classList.remove('hidden');
+            const grid = document.getElementById('gamesGrid'); grid.innerHTML = '';
+
+            try {
+                const res = await fetch(`${API_BASE}/api/favorites`, { headers: getHeaders() });
+                if (res.status === 401) { logout(); return showToast("Войдите в аккаунт", true); }
+                const games = await res.json();
+                if (games.length === 0) { document.getElementById('statusMessage').textContent = 'Ваш список пуст.'; document.getElementById('statusMessage').className = 'text-center font-semibold mb-8 text-xl text-gray-400'; return; }
+                games.forEach(g => grid.innerHTML += createGameCardHTML(g, true)); document.getElementById('statusMessage').classList.add('hidden');
+            } catch (e) { document.getElementById('statusMessage').textContent = 'Ошибка загрузки.'; }
+        }
+
+        async function removeFromFavorites(slug) {
+            try {
+                const res = await fetch(`${API_BASE}/api/favorites/${slug}`, { method: 'DELETE', headers: getHeaders() });
+                const result = await res.json();
+                if (res.status === 401) return logout();
+                showToast(result.message); loadFavorites();
+            } catch (e) { showToast("Ошибка", true); }
+        }
+
+        function closeGameDetails() {
+            document.getElementById('detailView').classList.add('hidden'); document.getElementById('mainView').classList.remove('hidden'); document.getElementById('statusMessage').classList.add('hidden'); window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        window.onload = () => { checkAuth(); loadTopGames(); };
+    </script>
+</body>
+</html>

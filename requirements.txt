@@ -3,3 +3,4 @@ uvicorn
 requests
 deep-translator
 pydantic
+google-auth

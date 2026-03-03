@@ -6,7 +6,10 @@ import sqlite3
 from pydantic import BaseModel
 import hashlib
 import secrets
-import re  # <--- Новый импорт для поиска Steam ID
+import re
+# --- НОВЫЕ ИМПОРТЫ ДЛЯ GOOGLE LOGIN ---
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 app = FastAPI(title="GamePickerOnline API")
 
@@ -19,6 +22,7 @@ app.add_middleware(
 )
 
 RAWG_API_KEY = "9f57b2917ad04564baecb2015123510a" 
+GOOGLE_CLIENT_ID = "663265296931-ch1t13bftrfliu1um89jqnnr15q5p41p.apps.googleusercontent.com"
 
 def init_db():
     conn = sqlite3.connect("games.db")
@@ -66,12 +70,16 @@ class UserAuth(BaseModel):
     username: str
     password: str
 
+class GoogleAuth(BaseModel):
+    credential: str
+
 class FavoriteGame(BaseModel):
     slug: str
     name: str
     image_url: str
     metacritic_score: int | None = None
 
+# --- АВТОРИЗАЦИЯ ---
 @app.post("/api/register")
 def register(user: UserAuth):
     conn = sqlite3.connect("games.db")
@@ -100,6 +108,43 @@ def login(user: UserAuth):
     conn.close()
     return {"message": "Вход выполнен", "token": new_token, "username": user.username}
 
+# --- НОВАЯ РУЧКА: ВХОД ЧЕРЕЗ GOOGLE ---
+@app.post("/api/google-login")
+def google_login(data: GoogleAuth):
+    try:
+        # Проверяем токен через сервера Google
+        idinfo = id_token.verify_oauth2_token(data.credential, google_requests.Request(), GOOGLE_CLIENT_ID)
+        email = idinfo['email']
+        # Берем имя из Google, либо левую часть от email
+        name = idinfo.get('name', email.split('@')[0]) 
+
+        conn = sqlite3.connect("games.db")
+        cursor = conn.cursor()
+        
+        # Проверяем, есть ли уже такой пользователь
+        cursor.execute("SELECT id FROM users WHERE username = ?", (email,))
+        row = cursor.fetchone()
+        
+        if not row:
+            # Если нет - создаем нового (вместо пароля пишем заглушку)
+            cursor.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (email, "GOOGLE_AUTH_NO_PASSWORD"))
+            conn.commit()
+            user_id = cursor.lastrowid
+        else:
+            user_id = row[0]
+
+        # Выдаем нашу внутреннюю сессию
+        new_token = secrets.token_hex(16)
+        cursor.execute("UPDATE users SET token = ? WHERE id = ?", (new_token, user_id))
+        conn.commit()
+        conn.close()
+
+        return {"message": "Вход через Google успешен!", "token": new_token, "username": name}
+
+    except ValueError:
+        return {"error": "Недействительный токен Google!"}
+
+# --- ИЗБРАННОЕ ---
 @app.get("/api/favorites")
 def get_favorites(authorization: str = Header(None)):
     token = authorization.replace("Bearer ", "") if authorization else None
@@ -152,7 +197,6 @@ def search_games(query: str):
     if not res: return {"error": "Ничего не найдено."}
     return res
 
-# --- ОБНОВЛЕННАЯ ФУНКЦИЯ (ДОБАВЛЕНЫ ОТЗЫВЫ STEAM И СКРИНШОТЫ) ---
 @app.get("/api/games/{game_slug}")
 def get_game_info(game_slug: str):
     url = f"https://api.rawg.io/api/games/{game_slug}?key={RAWG_API_KEY}"
@@ -160,12 +204,10 @@ def get_game_info(game_slug: str):
     if response.status_code != 200: return {"error": "Игра не найдена."}
     raw_data = response.json()
     
-    # 1. Базовая инфа и перевод
     desc_clean = raw_data.get("description_raw", "Нет описания.").replace("#", "").strip()
     try: desc_ru = GoogleTranslator(source='auto', target='ru').translate(desc_clean[:4900])
     except: desc_ru = desc_clean 
 
-    # 2. Требования ПК
     pc_min, pc_rec = "Нет данных", "Нет данных"
     for p in raw_data.get("platforms", []):
         if p.get("platform", {}).get("name") == "PC":
@@ -173,7 +215,6 @@ def get_game_info(game_slug: str):
             pc_min, pc_rec = reqs.get("minimum", "Нет данных"), reqs.get("recommended", "Нет данных")
             break
 
-    # 3. МАГИЯ STEAM: Ищем ID игры через правильный эндпоинт RAWG
     steam_reviews = []
     steam_id = None
     
@@ -190,13 +231,10 @@ def get_game_info(game_slug: str):
     except Exception as e:
         print(f"Ошибка получения магазинов: {e}")
 
-    # Если нашли ID, идем в Steam притворяясь браузером
     if steam_id:
         try:
             steam_url = f"https://store.steampowered.com/appreviews/{steam_id}?json=1&language=russian&filter=all&num_per_page=4"
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
+            headers = {'User-Agent': 'Mozilla/5.0'}
             steam_res = requests.get(steam_url, headers=headers, timeout=5)
             if steam_res.status_code == 200:
                 reviews_data = steam_res.json()
@@ -204,23 +242,18 @@ def get_game_info(game_slug: str):
                     clean_review = r.get("review", "").replace("\n", " ")
                     if len(clean_review) > 250:
                         clean_review = clean_review[:250] + "..."
-                    steam_reviews.append({
-                        "voted_up": r.get("voted_up", True),
-                        "review": clean_review
-                    })
+                    steam_reviews.append({"voted_up": r.get("voted_up", True), "review": clean_review})
         except Exception as e:
-            print(f"--- Ошибка связи со Steam: {e} ---")
+            pass
 
-    # 4. МАГИЯ СКРИНШОТОВ
     screenshots = []
     try:
         scr_url = f"https://api.rawg.io/api/games/{game_slug}/screenshots?key={RAWG_API_KEY}"
         scr_res = requests.get(scr_url, timeout=3).json()
-        # Берём первые 6 скриншотов
         for item in scr_res.get("results", [])[:6]:
             screenshots.append(item.get("image"))
     except Exception as e:
-        print(f"Ошибка загрузки скриншотов: {e}")
+        pass
 
     return {
         "name": raw_data.get("name"), "image_url": raw_data.get("background_image"), "metacritic_score": raw_data.get("metacritic"),
@@ -229,5 +262,5 @@ def get_game_info(game_slug: str):
         "pc_minimum": pc_min, "pc_recommended": pc_rec,
         "steam_reviews": steam_reviews,
         "metacritic_url": raw_data.get("metacritic_url"),
-        "screenshots": screenshots # <--- НОВОЕ ПОЛЕ СО СКРИНШОТАМИ
+        "screenshots": screenshots
     }
