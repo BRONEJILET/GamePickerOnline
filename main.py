@@ -314,3 +314,4 @@ def get_game_info(game_slug: str):
         "screenshots": screenshots
 
     }
+
