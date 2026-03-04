@@ -22,10 +22,11 @@ app.add_middleware(
 )
 
 RAWG_API_KEY = "9f57b2917ad04564baecb2015123510a" 
+# ВАЖНО: Твой актуальный ключ!
 GOOGLE_CLIENT_ID = "67328762736-1pba95enhuh3c7jvlt38benvhhfruot2.apps.googleusercontent.com"
 
 # ==========================================
-# БАЗА ДАННЫХ (НОВАЯ СТРУКТУРА)
+# БАЗА ДАННЫХ
 # ==========================================
 def init_db():
     conn = sqlite3.connect("games.db")
@@ -57,7 +58,7 @@ def init_db():
 init_db()
 
 # ==========================================
-# ПРОДВИНУТАЯ БЕЗОПАСНОСТЬ ПАРОЛЕЙ (PBKDF2 + Salt)
+# БЕЗОПАСНОСТЬ
 # ==========================================
 def hash_password(password: str):
     salt = os.urandom(16)
@@ -101,7 +102,7 @@ class UpdateStatus(BaseModel):
     status: str
 
 # ==========================================
-# АВТОРИЗАЦИЯ
+# АВТОРИЗАЦИЯ (С ЕДИНОЙ СЕССИЕЙ)
 # ==========================================
 @app.post("/api/register")
 def register(user: UserAuth):
@@ -109,10 +110,10 @@ def register(user: UserAuth):
     conn = sqlite3.connect("games.db")
     cursor = conn.cursor()
     try:
-        # Стандартная аватарка для обычных пользователей
         default_avatar = f"https://api.dicebear.com/7.x/bottts/svg?seed={user.username}"
-        cursor.execute("INSERT INTO users (username, password_hash, avatar_url) VALUES (?, ?, ?)", 
-                       (user.username, hash_password(user.password), default_avatar))
+        new_token = secrets.token_hex(16)
+        cursor.execute("INSERT INTO users (username, password_hash, token, avatar_url) VALUES (?, ?, ?, ?)", 
+                       (user.username, hash_password(user.password), new_token, default_avatar))
         conn.commit()
         return {"message": "Регистрация успешна!"}
     except sqlite3.IntegrityError:
@@ -124,17 +125,22 @@ def register(user: UserAuth):
 def login(user: UserAuth):
     conn = sqlite3.connect("games.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT id, password_hash, avatar_url FROM users WHERE username = ?", (user.username,))
+    # Достаем токен из базы
+    cursor.execute("SELECT id, password_hash, avatar_url, token FROM users WHERE username = ?", (user.username,))
     row = cursor.fetchone()
     
-    # Проверяем пароль безопасным методом
     if not row or not verify_password(user.password, row[1]):
         conn.close()
         return {"error": "Неверный логин или пароль"}
         
-    new_token = secrets.token_hex(16)
-    cursor.execute("UPDATE users SET token = ? WHERE id = ?", (new_token, row[0]))
-    conn.commit()
+    existing_token = row[3]
+    if not existing_token:
+        new_token = secrets.token_hex(16)
+        cursor.execute("UPDATE users SET token = ? WHERE id = ?", (new_token, row[0]))
+        conn.commit()
+    else:
+        new_token = existing_token
+
     conn.close()
     return {"message": "Вход выполнен", "token": new_token, "username": user.username, "avatar_url": row[2]}
 
@@ -148,24 +154,25 @@ def google_login(data: GoogleAuth):
 
         conn = sqlite3.connect("games.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM users WHERE username = ?", (email,))
+        cursor.execute("SELECT id, token FROM users WHERE username = ?", (email,))
         row = cursor.fetchone()
         
         if not row:
-            cursor.execute("INSERT INTO users (username, password_hash, avatar_url) VALUES (?, ?, ?)", 
-                           (email, "GOOGLE_AUTH_NO_PASSWORD", avatar))
+            new_token = secrets.token_hex(16)
+            cursor.execute("INSERT INTO users (username, password_hash, token, avatar_url) VALUES (?, ?, ?, ?)", 
+                           (email, "GOOGLE_AUTH_NO_PASSWORD", new_token, avatar))
             conn.commit()
-            user_id = cursor.lastrowid
         else:
             user_id = row[0]
-            # Обновляем аватарку, если юзер сменил её в гугле
-            cursor.execute("UPDATE users SET avatar_url = ? WHERE id = ?", (avatar, user_id))
+            existing_token = row[1]
+            if existing_token:
+                new_token = existing_token
+            else:
+                new_token = secrets.token_hex(16)
+            cursor.execute("UPDATE users SET avatar_url = ?, token = ? WHERE id = ?", (avatar, new_token, user_id))
+            conn.commit()
 
-        new_token = secrets.token_hex(16)
-        cursor.execute("UPDATE users SET token = ? WHERE id = ?", (new_token, user_id))
-        conn.commit()
         conn.close()
-
         return {"message": "Вход через Google успешен!", "token": new_token, "username": name, "avatar_url": avatar}
     except ValueError:
         return {"error": "Недействительный токен Google!"}
@@ -312,6 +319,4 @@ def get_game_info(game_slug: str):
         "steam_reviews": steam_reviews,
         "metacritic_url": raw_data.get("metacritic_url"),
         "screenshots": screenshots
-
     }
-
