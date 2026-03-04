@@ -22,7 +22,7 @@ app.add_middleware(
 )
 
 RAWG_API_KEY = "9f57b2917ad04564baecb2015123510a" 
-GOOGLE_CLIENT_ID = "663265296931-ch1t13bftrfliu1um89jqnnr15q5p41p.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID = "67328762736-1pba95enhuh3c7jvlt38benvhhfruot2.apps.googleusercontent.com"
 
 # ==========================================
 # БАЗА ДАННЫХ (НОВАЯ СТРУКТУРА)
@@ -312,4 +312,5 @@ def get_game_info(game_slug: str):
         "steam_reviews": steam_reviews,
         "metacritic_url": raw_data.get("metacritic_url"),
         "screenshots": screenshots
+
     }
