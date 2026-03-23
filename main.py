@@ -8,10 +8,12 @@ import hashlib
 import secrets
 import os
 import re
+import html
+import time
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
-app = FastAPI(title="GamePickerOnline API")
+app = FastAPI(title="GamePickerOnline API - RAWG Style")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,8 +24,10 @@ app.add_middleware(
 )
 
 RAWG_API_KEY = "9f57b2917ad04564baecb2015123510a" 
-# ВАЖНО: Твой актуальный ключ!
 GOOGLE_CLIENT_ID = "67328762736-1pba95enhuh3c7jvlt38benvhhfruot2.apps.googleusercontent.com"
+
+# Словарь для защиты от спама (Rate Limiting)
+last_message_time = {}
 
 # ==========================================
 # БАЗА ДАННЫХ
@@ -52,13 +56,35 @@ def init_db():
             FOREIGN KEY(user_id) REFERENCES users(id)
         )
     """)
+    # НОВЫЕ ТАБЛИЦЫ ДЛЯ ФОРУМА
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS threads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            game_slug TEXT,
+            title TEXT,
+            author_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(author_id) REFERENCES users(id)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            thread_id INTEGER,
+            author_id INTEGER,
+            content TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(thread_id) REFERENCES threads(id),
+            FOREIGN KEY(author_id) REFERENCES users(id)
+        )
+    """)
     conn.commit()
     conn.close()
 
 init_db()
 
 # ==========================================
-# БЕЗОПАСНОСТЬ
+# БЕЗОПАСНОСТЬ И УТИЛИТЫ
 # ==========================================
 def hash_password(password: str):
     salt = os.urandom(16)
@@ -84,6 +110,11 @@ def get_user_by_token(token: str):
     if not user: raise HTTPException(status_code=401, detail="Неверный или устаревший токен")
     return {"id": user[0], "username": user[1], "avatar_url": user[2]}
 
+# Защита от XSS (Санитизация)
+def sanitize_text(text: str):
+    if not text: return ""
+    return html.escape(text.strip())
+
 # --- МОДЕЛИ ---
 class UserAuth(BaseModel):
     username: str
@@ -100,6 +131,15 @@ class FavoriteGame(BaseModel):
 
 class UpdateStatus(BaseModel):
     status: str
+
+class NewThread(BaseModel):
+    game_slug: str
+    title: str
+    message: str
+
+class NewMessage(BaseModel):
+    thread_id: int
+    content: str
 
 # ==========================================
 # АВТОРИЗАЦИЯ (С ЕДИНОЙ СЕССИЕЙ)
@@ -125,7 +165,6 @@ def register(user: UserAuth):
 def login(user: UserAuth):
     conn = sqlite3.connect("games.db")
     cursor = conn.cursor()
-    # Достаем токен из базы
     cursor.execute("SELECT id, password_hash, avatar_url, token FROM users WHERE username = ?", (user.username,))
     row = cursor.fetchone()
     
@@ -236,22 +275,78 @@ def update_status(game_slug: str, data: UpdateStatus, authorization: str = Heade
     return {"message": "Статус обновлен!"}
 
 # ==========================================
+# ФОРУМ И ОБЩЕНИЕ (С Защитой)
+# ==========================================
+@app.post("/api/forum/thread")
+def create_thread(data: NewThread, authorization: str = Header(None)):
+    token = authorization.replace("Bearer ", "") if authorization else None
+    user = get_user_by_token(token)
+    
+    # Rate Limiting (Анти-спам): 1 тема в 10 секунд
+    current_time = time.time()
+    if user["id"] in last_message_time and current_time - last_message_time[user["id"]] < 10:
+        return {"error": "Слишком частые запросы. Подождите немного."}
+    
+    # XSS Защита
+    safe_title = sanitize_text(data.title)
+    safe_message = sanitize_text(data.message)
+    
+    if len(safe_title) < 3 or len(safe_message) < 3:
+        return {"error": "Слишком короткий текст."}
+
+    conn = sqlite3.connect("games.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO threads (game_slug, title, author_id) VALUES (?, ?, ?)", (data.game_slug, safe_title, user["id"]))
+    thread_id = cursor.lastrowid
+    cursor.execute("INSERT INTO messages (thread_id, author_id, content) VALUES (?, ?, ?)", (thread_id, user["id"], safe_message))
+    conn.commit()
+    conn.close()
+    
+    last_message_time[user["id"]] = current_time
+    return {"message": "Тема успешно создана!", "thread_id": thread_id}
+
+@app.get("/api/forum/{game_slug}")
+def get_game_threads(game_slug: str):
+    conn = sqlite3.connect("games.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT t.id, t.title, u.username, t.created_at, 
+               (SELECT COUNT(*) FROM messages WHERE thread_id = t.id) as msg_count
+        FROM threads t
+        JOIN users u ON t.author_id = u.id
+        WHERE t.game_slug = ?
+        ORDER BY t.created_at DESC
+    """, (game_slug,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"id": r[0], "title": r[1], "author": r[2], "created_at": r[3], "messages_count": r[4]} for r in rows]
+
+# ==========================================
 # RAWG & STEAM
 # ==========================================
 @app.get("/")
 def read_root(): return {"message": "Сервер работает"}
 
 @app.get("/api/top-games")
-def get_top_games():
-    url = f"https://api.rawg.io/api/games?key={RAWG_API_KEY}&ordering=-metacritic&page_size=12"
-    return [{"slug": i.get("slug"), "name": i.get("name"), "image_url": i.get("background_image"), "metacritic_score": i.get("metacritic"), "release_date": i.get("released")} for i in requests.get(url).json().get("results", [])]
+def get_top_games(page: int = 1, page_size: int = 15):
+    # Добавлена поддержка параметров page и page_size для бесконечной ленты
+    url = f"https://api.rawg.io/api/games?key={RAWG_API_KEY}&ordering=-metacritic&page={page}&page_size={page_size}"
+    try:
+        data = requests.get(url).json()
+        return [{"slug": i.get("slug"), "name": i.get("name"), "image_url": i.get("background_image"), "metacritic_score": i.get("metacritic"), "release_date": i.get("released")} for i in data.get("results", [])]
+    except Exception:
+        return []
 
 @app.get("/api/search")
-def search_games(query: str):
-    url = f"https://api.rawg.io/api/games?key={RAWG_API_KEY}&search={query}&page_size=12"
-    res = [{"slug": i.get("slug"), "name": i.get("name"), "image_url": i.get("background_image"), "metacritic_score": i.get("metacritic"), "release_date": i.get("released")} for i in requests.get(url).json().get("results", [])]
-    if not res: return {"error": "Ничего не найдено."}
-    return res
+def search_games(query: str, page: int = 1):
+    # Добавлена поддержка параметра page для поисковой выдачи
+    url = f"https://api.rawg.io/api/games?key={RAWG_API_KEY}&search={query}&page={page}&page_size=15"
+    try:
+        res = [{"slug": i.get("slug"), "name": i.get("name"), "image_url": i.get("background_image"), "metacritic_score": i.get("metacritic"), "release_date": i.get("released")} for i in requests.get(url).json().get("results", [])]
+        if not res: return {"error": "Ничего не найдено."}
+        return res
+    except Exception:
+        return {"error": "Ошибка при поиске."}
 
 @app.get("/api/games/{game_slug}")
 def get_game_info(game_slug: str):
