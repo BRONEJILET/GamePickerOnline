@@ -320,7 +320,8 @@ def get_game_threads(game_slug: str):
     rows = cursor.fetchall()
     conn.close()
     return [{"id": r[0], "title": r[1], "author": r[2], "created_at": r[3], "messages_count": r[4]} for r in rows]
-    @app.get("/api/forum/thread/{thread_id}")
+
+@app.get("/api/forum/thread/{thread_id}")
 def get_thread_messages(thread_id: int):
     conn = sqlite3.connect("games.db")
     cursor = conn.cursor()
