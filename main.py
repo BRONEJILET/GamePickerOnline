@@ -26,12 +26,8 @@ app.add_middleware(
 RAWG_API_KEY = "9f57b2917ad04564baecb2015123510a" 
 GOOGLE_CLIENT_ID = "67328762736-1pba95enhuh3c7jvlt38benvhhfruot2.apps.googleusercontent.com"
 
-# Словарь для защиты от спама (Rate Limiting)
 last_message_time = {}
 
-# ==========================================
-# БАЗА ДАННЫХ
-# ==========================================
 def init_db():
     conn = sqlite3.connect("games.db")
     cursor = conn.cursor()
@@ -56,7 +52,6 @@ def init_db():
             FOREIGN KEY(user_id) REFERENCES users(id)
         )
     """)
-    # НОВЫЕ ТАБЛИЦЫ ДЛЯ ФОРУМА
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS threads (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,9 +78,6 @@ def init_db():
 
 init_db()
 
-# ==========================================
-# БЕЗОПАСНОСТЬ И УТИЛИТЫ
-# ==========================================
 def hash_password(password: str):
     salt = os.urandom(16)
     pwdhash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
@@ -110,12 +102,10 @@ def get_user_by_token(token: str):
     if not user: raise HTTPException(status_code=401, detail="Неверный или устаревший токен")
     return {"id": user[0], "username": user[1], "avatar_url": user[2]}
 
-# Защита от XSS (Санитизация)
 def sanitize_text(text: str):
     if not text: return ""
     return html.escape(text.strip())
 
-# --- МОДЕЛИ ---
 class UserAuth(BaseModel):
     username: str
     password: str
@@ -137,13 +127,10 @@ class NewThread(BaseModel):
     title: str
     message: str
 
-class NewMessage(BaseModel):
+class ReplyMessage(BaseModel):
     thread_id: int
     content: str
 
-# ==========================================
-# АВТОРИЗАЦИЯ (С ЕДИНОЙ СЕССИЕЙ)
-# ==========================================
 @app.post("/api/register")
 def register(user: UserAuth):
     if len(user.password) < 6: return {"error": "Пароль должен быть не менее 6 символов!"}
@@ -167,11 +154,9 @@ def login(user: UserAuth):
     cursor = conn.cursor()
     cursor.execute("SELECT id, password_hash, avatar_url, token FROM users WHERE username = ?", (user.username,))
     row = cursor.fetchone()
-    
     if not row or not verify_password(user.password, row[1]):
         conn.close()
         return {"error": "Неверный логин или пароль"}
-        
     existing_token = row[3]
     if not existing_token:
         new_token = secrets.token_hex(16)
@@ -179,7 +164,6 @@ def login(user: UserAuth):
         conn.commit()
     else:
         new_token = existing_token
-
     conn.close()
     return {"message": "Вход выполнен", "token": new_token, "username": user.username, "avatar_url": row[2]}
 
@@ -190,12 +174,10 @@ def google_login(data: GoogleAuth):
         email = idinfo['email']
         name = idinfo.get('name', email.split('@')[0])
         avatar = idinfo.get('picture', f"https://api.dicebear.com/7.x/bottts/svg?seed={name}")
-
         conn = sqlite3.connect("games.db")
         cursor = conn.cursor()
         cursor.execute("SELECT id, token FROM users WHERE username = ?", (email,))
         row = cursor.fetchone()
-        
         if not row:
             new_token = secrets.token_hex(16)
             cursor.execute("INSERT INTO users (username, password_hash, token, avatar_url) VALUES (?, ?, ?, ?)", 
@@ -204,13 +186,10 @@ def google_login(data: GoogleAuth):
         else:
             user_id = row[0]
             existing_token = row[1]
-            if existing_token:
-                new_token = existing_token
-            else:
-                new_token = secrets.token_hex(16)
+            if existing_token: new_token = existing_token
+            else: new_token = secrets.token_hex(16)
             cursor.execute("UPDATE users SET avatar_url = ?, token = ? WHERE id = ?", (avatar, new_token, user_id))
             conn.commit()
-
         conn.close()
         return {"message": "Вход через Google успешен!", "token": new_token, "username": name, "avatar_url": avatar}
     except ValueError:
@@ -222,9 +201,6 @@ def get_user_info(authorization: str = Header(None)):
     user = get_user_by_token(token)
     return {"username": user["username"], "avatar_url": user["avatar_url"]}
 
-# ==========================================
-# ИЗБРАННОЕ И СТАТУСЫ
-# ==========================================
 @app.get("/api/favorites")
 def get_favorites(authorization: str = Header(None)):
     token = authorization.replace("Bearer ", "") if authorization else None
@@ -274,26 +250,17 @@ def update_status(game_slug: str, data: UpdateStatus, authorization: str = Heade
     conn.close()
     return {"message": "Статус обновлен!"}
 
-# ==========================================
-# ФОРУМ И ОБЩЕНИЕ (С Защитой)
-# ==========================================
+# ==================== ФОРУМ ====================
 @app.post("/api/forum/thread")
 def create_thread(data: NewThread, authorization: str = Header(None)):
     token = authorization.replace("Bearer ", "") if authorization else None
     user = get_user_by_token(token)
-    
-    # Rate Limiting (Анти-спам): 1 тема в 10 секунд
     current_time = time.time()
     if user["id"] in last_message_time and current_time - last_message_time[user["id"]] < 10:
-        return {"error": "Слишком частые запросы. Подождите немного."}
-    
-    # XSS Защита
+        return {"error": "Слишком частые запросы."}
     safe_title = sanitize_text(data.title)
     safe_message = sanitize_text(data.message)
-    
-    if len(safe_title) < 3 or len(safe_message) < 3:
-        return {"error": "Слишком короткий текст."}
-
+    if len(safe_title) < 3 or len(safe_message) < 3: return {"error": "Слишком короткий текст."}
     conn = sqlite3.connect("games.db")
     cursor = conn.cursor()
     cursor.execute("INSERT INTO threads (game_slug, title, author_id) VALUES (?, ?, ?)", (data.game_slug, safe_title, user["id"]))
@@ -301,7 +268,6 @@ def create_thread(data: NewThread, authorization: str = Header(None)):
     cursor.execute("INSERT INTO messages (thread_id, author_id, content) VALUES (?, ?, ?)", (thread_id, user["id"], safe_message))
     conn.commit()
     conn.close()
-    
     last_message_time[user["id"]] = current_time
     return {"message": "Тема успешно создана!", "thread_id": thread_id}
 
@@ -312,10 +278,7 @@ def get_game_threads(game_slug: str):
     cursor.execute("""
         SELECT t.id, t.title, u.username, t.created_at, 
                (SELECT COUNT(*) FROM messages WHERE thread_id = t.id) as msg_count
-        FROM threads t
-        JOIN users u ON t.author_id = u.id
-        WHERE t.game_slug = ?
-        ORDER BY t.created_at DESC
+        FROM threads t JOIN users u ON t.author_id = u.id WHERE t.game_slug = ? ORDER BY t.created_at DESC
     """, (game_slug,))
     rows = cursor.fetchall()
     conn.close()
@@ -327,14 +290,43 @@ def get_thread_messages(thread_id: int):
     cursor = conn.cursor()
     cursor.execute("""
         SELECT m.id, u.username, u.avatar_url, m.content, m.created_at
-        FROM messages m
-        JOIN users u ON m.author_id = u.id
-        WHERE m.thread_id = ?
-        ORDER BY m.created_at ASC
+        FROM messages m JOIN users u ON m.author_id = u.id WHERE m.thread_id = ? ORDER BY m.created_at ASC
     """, (thread_id,))
     rows = cursor.fetchall()
     conn.close()
     return [{"id": r[0], "author": r[1], "avatar_url": r[2], "content": r[3], "created_at": r[4]} for r in rows]
+
+# НОВЫЙ РОУТ: Добавление ответа в тему
+@app.post("/api/forum/message")
+def add_message(data: ReplyMessage, authorization: str = Header(None)):
+    token = authorization.replace("Bearer ", "") if authorization else None
+    user = get_user_by_token(token)
+    current_time = time.time()
+    if user["id"] in last_message_time and current_time - last_message_time[user["id"]] < 5:
+        return {"error": "Подождите пару секунд перед отправкой."}
+    safe_content = sanitize_text(data.content)
+    if len(safe_content) < 2: return {"error": "Слишком короткий текст."}
+    conn = sqlite3.connect("games.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO messages (thread_id, author_id, content) VALUES (?, ?, ?)", (data.thread_id, user["id"], safe_content))
+    conn.commit()
+    conn.close()
+    last_message_time[user["id"]] = current_time
+    return {"message": "Ответ добавлен!"}
+
+# НОВЫЙ РОУТ: Глобальный форум (последние обсуждения)
+@app.get("/api/forum/recent")
+def get_recent_threads():
+    conn = sqlite3.connect("games.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT t.id, t.game_slug, t.title, u.username, t.created_at,
+               (SELECT COUNT(*) FROM messages WHERE thread_id = t.id) as msg_count
+        FROM threads t JOIN users u ON t.author_id = u.id ORDER BY t.created_at DESC LIMIT 25
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"id": r[0], "game_slug": r[1], "title": r[2], "author": r[3], "created_at": r[4], "messages_count": r[5]} for r in rows]
 
 # ==========================================
 # RAWG & STEAM
@@ -344,24 +336,20 @@ def read_root(): return {"message": "Сервер работает"}
 
 @app.get("/api/top-games")
 def get_top_games(page: int = 1, page_size: int = 15):
-    # Добавлена поддержка параметров page и page_size для бесконечной ленты
     url = f"https://api.rawg.io/api/games?key={RAWG_API_KEY}&ordering=-metacritic&page={page}&page_size={page_size}"
     try:
         data = requests.get(url).json()
         return [{"slug": i.get("slug"), "name": i.get("name"), "image_url": i.get("background_image"), "metacritic_score": i.get("metacritic"), "release_date": i.get("released")} for i in data.get("results", [])]
-    except Exception:
-        return []
+    except Exception: return []
 
 @app.get("/api/search")
 def search_games(query: str, page: int = 1):
-    # Добавлена поддержка параметра page для поисковой выдачи
     url = f"https://api.rawg.io/api/games?key={RAWG_API_KEY}&search={query}&page={page}&page_size=15"
     try:
         res = [{"slug": i.get("slug"), "name": i.get("name"), "image_url": i.get("background_image"), "metacritic_score": i.get("metacritic"), "release_date": i.get("released")} for i in requests.get(url).json().get("results", [])]
         if not res: return {"error": "Ничего не найдено."}
         return res
-    except Exception:
-        return {"error": "Ошибка при поиске."}
+    except Exception: return {"error": "Ошибка при поиске."}
 
 @app.get("/api/games/{game_slug}")
 def get_game_info(game_slug: str):
@@ -369,7 +357,6 @@ def get_game_info(game_slug: str):
     response = requests.get(url)
     if response.status_code != 200: return {"error": "Игра не найдена."}
     raw_data = response.json()
-    
     desc_clean = raw_data.get("description_raw", "Нет описания.").replace("#", "").strip()
     try: desc_ru = GoogleTranslator(source='auto', target='ru').translate(desc_clean[:4900])
     except: desc_ru = desc_clean 
@@ -383,50 +370,39 @@ def get_game_info(game_slug: str):
 
     steam_reviews = []
     steam_id = None
-    
     stores_url = f"https://api.rawg.io/api/games/{game_slug}/stores?key={RAWG_API_KEY}"
     try:
         stores_res = requests.get(stores_url, timeout=3).json()
         for store_data in stores_res.get("results", []):
             if store_data.get("store_id") == 1:
-                store_url = store_data.get("url", "")
-                match = re.search(r'app/(\d+)', store_url)
+                match = re.search(r'app/(\d+)', store_data.get("url", ""))
                 if match:
                     steam_id = match.group(1)
                     break
-    except Exception as e:
-        pass
+    except Exception: pass
 
     if steam_id:
         try:
             steam_url = f"https://store.steampowered.com/appreviews/{steam_id}?json=1&language=russian&filter=all&num_per_page=4"
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            steam_res = requests.get(steam_url, headers=headers, timeout=5)
+            steam_res = requests.get(steam_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
             if steam_res.status_code == 200:
-                reviews_data = steam_res.json()
-                for r in reviews_data.get("reviews", []):
+                for r in steam_res.json().get("reviews", []):
                     clean_review = r.get("review", "").replace("\n", " ")
-                    if len(clean_review) > 250:
-                        clean_review = clean_review[:250] + "..."
+                    if len(clean_review) > 250: clean_review = clean_review[:250] + "..."
                     steam_reviews.append({"voted_up": r.get("voted_up", True), "review": clean_review})
-        except Exception as e:
-            pass
+        except Exception: pass
 
     screenshots = []
     try:
         scr_url = f"https://api.rawg.io/api/games/{game_slug}/screenshots?key={RAWG_API_KEY}"
-        scr_res = requests.get(scr_url, timeout=3).json()
-        for item in scr_res.get("results", [])[:6]:
+        for item in requests.get(scr_url, timeout=3).json().get("results", [])[:6]:
             screenshots.append(item.get("image"))
-    except Exception as e:
-        pass
+    except Exception: pass
 
     return {
         "name": raw_data.get("name"), "image_url": raw_data.get("background_image"), "metacritic_score": raw_data.get("metacritic"),
         "release_date": raw_data.get("released"), "platforms": [p["platform"]["name"] for p in raw_data.get("platforms", [])],
         "description": desc_ru, "website": raw_data.get("website"), "developers": [d["name"] for d in raw_data.get("developers", [])],
-        "pc_minimum": pc_min, "pc_recommended": pc_rec,
-        "steam_reviews": steam_reviews,
-        "metacritic_url": raw_data.get("metacritic_url"),
-        "screenshots": screenshots
+        "pc_minimum": pc_min, "pc_recommended": pc_rec, "steam_reviews": steam_reviews,
+        "metacritic_url": raw_data.get("metacritic_url"), "screenshots": screenshots
     }
