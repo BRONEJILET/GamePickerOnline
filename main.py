@@ -320,6 +320,20 @@ def get_game_threads(game_slug: str):
     rows = cursor.fetchall()
     conn.close()
     return [{"id": r[0], "title": r[1], "author": r[2], "created_at": r[3], "messages_count": r[4]} for r in rows]
+    @app.get("/api/forum/thread/{thread_id}")
+def get_thread_messages(thread_id: int):
+    conn = sqlite3.connect("games.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT m.id, u.username, u.avatar_url, m.content, m.created_at
+        FROM messages m
+        JOIN users u ON m.author_id = u.id
+        WHERE m.thread_id = ?
+        ORDER BY m.created_at ASC
+    """, (thread_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"id": r[0], "author": r[1], "avatar_url": r[2], "content": r[3], "created_at": r[4]} for r in rows]
 
 # ==========================================
 # RAWG & STEAM
