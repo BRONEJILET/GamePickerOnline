@@ -45,6 +45,10 @@
         <div class="bg-[#202020] p-8 rounded shadow-2xl border border-gray-700 w-full max-w-lg relative">
             <button onclick="closeThreadModal()" class="absolute top-4 right-5 text-gray-500 hover:text-white text-2xl">✕</button>
             <h2 class="text-2xl font-black mb-6 text-white uppercase tracking-wide">Новое обсуждение</h2>
+            
+            <select id="newThreadGameSelect" class="w-full px-4 py-3 mb-4 rounded bg-[#151515] border border-gray-700 text-white focus:outline-none focus:border-gray-400 hidden">
+            </select>
+
             <input type="text" id="newThreadTitle" placeholder="Заголовок темы" class="w-full px-4 py-3 mb-4 rounded bg-[#151515] border border-gray-700 text-white focus:outline-none focus:border-gray-400">
             <textarea id="newThreadMessage" placeholder="Ваше сообщение..." class="w-full px-4 py-3 mb-6 rounded bg-[#151515] border border-gray-700 text-white focus:outline-none focus:border-gray-400 h-32 resize-none"></textarea>
             <button onclick="submitNewThread()" class="w-full py-3 bg-white text-black hover:bg-gray-200 rounded font-black text-lg transition-colors uppercase tracking-wider">Создать тему</button>
@@ -96,7 +100,10 @@
         </div>
 
         <div id="globalForumView" class="hidden fade-in">
-            <h2 class="text-3xl font-black text-white mb-6 uppercase tracking-tight">Обсуждения сообщества</h2>
+            <div class="flex justify-between items-end border-b border-gray-800 pb-2 mb-6">
+                <h2 class="text-3xl font-black text-white uppercase tracking-tight">Обсуждения</h2>
+                <button onclick="openGlobalThreadModal()" class="text-[#43A047] hover:text-green-400 font-bold uppercase text-sm tracking-wider">+ СОЗДАТЬ</button>
+            </div>
             <div id="globalForumList" class="flex flex-col gap-3"></div>
         </div>
 
@@ -150,7 +157,7 @@
                     <div id="gameForumBlock" class="mb-10">
                         <div class="flex justify-between items-end border-b border-gray-800 pb-2 mb-4">
                             <h3 class="text-lg font-black text-white uppercase tracking-widest">Обсуждения</h3>
-                            <button onclick="openThreadModal()" class="text-[#43A047] hover:text-green-400 font-bold uppercase text-xs tracking-wider">+ Создать</button>
+                            <button onclick="openGameThreadModal()" class="text-[#43A047] hover:text-green-400 font-bold uppercase text-xs tracking-wider">+ Создать</button>
                         </div>
                         <div id="gameForumList" class="flex flex-col gap-2"></div>
                     </div>
@@ -175,9 +182,10 @@
         let currentSearchQuery = '';
         let currentView = 'main'; 
 
-        // ИСПРАВЛЕНИЕ: Переменные для анти-спама кнопки Избранного
         let isFavoriteActionRunning = false;
         let favoriteClickCount = 0;
+        
+        let isGlobalThreadMode = false;
 
         function getHeaders() {
             const token = localStorage.getItem('token');
@@ -302,7 +310,6 @@
                 
                 const metaScore = document.getElementById('detailMeta'); metaScore.textContent = game.metacritic_score || '-'; metaScore.className = `flex-shrink-0 flex items-center justify-center w-16 h-16 rounded font-black text-2xl border-2 bg-[#151515] ${getScoreColorClass(game.metacritic_score)}`;
 
-                // ИСПРАВЛЕНИЕ: Динамическое обновление кнопки при входе на страницу
                 const favBtn = document.getElementById('btnFavorite');
                 if (favoriteSlugs.has(slug)) {
                     favBtn.className = "px-6 py-3 bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white rounded font-black uppercase tracking-wider text-sm flex items-center gap-2 cursor-pointer transition-colors border border-red-500";
@@ -327,26 +334,22 @@
             } catch (e) { returnToMain(); }
         }
 
-        // ИСПРАВЛЕНИЕ: Умная кнопка с защитой от спама и переключением
         async function toggleFavorite() {
             if (!localStorage.getItem('token')) { showToast("Войдите в аккаунт!", true); return openAuthModal('login'); }
             if (!currentGameData) return;
 
-            // Защита от спама (Debounce)
             if (isFavoriteActionRunning) {
                 favoriteClickCount++;
-                if (favoriteClickCount > 1) showToast("Подождите, не кликайте так быстро! 🛑", true);
+                if (favoriteClickCount > 1) showToast("Подождите, сервер обрабатывает запрос! 🛑", true);
                 return;
             }
             
-            isFavoriteActionRunning = true;
-            favoriteClickCount = 0;
+            isFavoriteActionRunning = true; favoriteClickCount = 0;
             const btn = document.getElementById('btnFavorite');
             btn.classList.add('opacity-50', 'cursor-not-allowed');
 
             try {
                 if (favoriteSlugs.has(currentGameData.slug)) {
-                    // Если игра уже на полке - удаляем
                     const res = await fetch(`${API_BASE}/api/favorites/${currentGameData.slug}`, { method: 'DELETE', headers: getHeaders() });
                     if (res.ok) {
                         favoriteSlugs.delete(currentGameData.slug);
@@ -355,25 +358,19 @@
                         showToast("Игра удалена с полки");
                     }
                 } else {
-                    // Игры нет на полке - добавляем
                     const res = await fetch(`${API_BASE}/api/favorites`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(currentGameData) });
                     const result = await res.json();
                     if (res.status === 401) { logout(); isFavoriteActionRunning = false; return; }
-                    if (result.error && result.error !== "Эта игра уже есть в вашем списке!") { 
-                        showToast(result.error, true); 
-                    } else { 
+                    if (result.error && result.error !== "Эта игра уже есть в вашем списке!") { showToast(result.error, true); } 
+                    else { 
                         favoriteSlugs.add(currentGameData.slug);
                         btn.className = "px-6 py-3 bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white rounded font-black uppercase tracking-wider text-sm flex items-center gap-2 cursor-pointer transition-colors border border-red-500";
                         btn.innerHTML = "✖ УБРАТЬ С ПОЛКИ";
                         showToast("Добавлено на полку!");
                     }
                 }
-            } catch (e) {
-                showToast("Ошибка соединения", true);
-            } finally {
-                btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                isFavoriteActionRunning = false;
-            }
+            } catch (e) { showToast("Ошибка соединения", true); } 
+            finally { btn.classList.remove('opacity-50', 'cursor-not-allowed'); isFavoriteActionRunning = false; }
         }
 
         async function loadCabinet() {
@@ -408,24 +405,28 @@
         async function updateGameStatus(slug, newStatus) { try { await fetch(`${API_BASE}/api/favorites/${slug}/status`, { method: 'PATCH', headers: getHeaders(), body: JSON.stringify({ status: newStatus }) }); showToast("Статус изменен"); } catch (e) { showToast("Ошибка", true); } }
         async function removeFromFavorites(slug) { try { await fetch(`${API_BASE}/api/favorites/${slug}`, { method: 'DELETE', headers: getHeaders() }); favoriteSlugs.delete(slug); showToast("Удалено"); loadCabinet(); } catch (e) { showToast("Ошибка", true); } }
 
-        // ИСПРАВЛЕНИЕ: Добавлен сброс кэша (?t=...) чтобы форум всегда был актуальным
+        // --- ИСПРАВЛЕНИЕ: ГЛОБАЛЬНЫЙ ФОРУМ ---
         async function loadGlobalForum() {
             hideAllViews(); currentView = 'globalForum'; document.getElementById('globalForumView').classList.remove('hidden');
             const list = document.getElementById('globalForumList'); list.innerHTML = '<div class="text-gray-500">Загрузка...</div>';
             try {
                 const res = await fetch(`${API_BASE}/api/forum/recent?t=${Date.now()}`);
+                if (!res.ok) { list.innerHTML = '<div class="text-red-500">Ошибка сервера</div>'; return; }
                 const threads = await res.json();
-                if(threads.length === 0) { list.innerHTML = '<div class="text-gray-500">Пока нет обсуждений.</div>'; return; }
+                if(threads.error) { list.innerHTML = `<div class="text-red-500">${threads.error}</div>`; return; }
+                if(!Array.isArray(threads) || threads.length === 0) { list.innerHTML = '<div class="text-gray-500">Пока нет обсуждений.</div>'; return; }
+                
                 list.innerHTML = '';
                 threads.forEach(t => {
+                    const safeTitle = t.title.replace(/'/g, "\\'");
                     list.innerHTML += `
-                    <div onclick="openThread(${t.id}, '${t.title}')" class="bg-[#202020] p-4 rounded border border-gray-800 hover:border-gray-500 cursor-pointer transition-colors">
+                    <div onclick="openThread(${t.id}, '${safeTitle}')" class="bg-[#202020] p-4 rounded border border-gray-800 hover:border-gray-500 cursor-pointer transition-colors">
                         <h3 class="text-white font-bold text-lg mb-1">${t.title}</h3>
                         <p class="text-[#43A047] text-xs font-black uppercase tracking-wider mb-2">Игра: ${t.game_slug}</p>
                         <p class="text-gray-500 text-xs">Автор: ${t.author} &bull; Ответов: ${t.messages_count}</p>
                     </div>`;
                 });
-            } catch(e) { list.innerHTML = 'Ошибка'; }
+            } catch(e) { list.innerHTML = '<div class="text-red-500">Ошибка соединения</div>'; }
         }
 
         async function loadGameThreads(slug) {
@@ -436,8 +437,9 @@
                 if(threads.length === 0) { list.innerHTML = '<span class="text-gray-500 text-sm">Никто еще не обсуждал эту игру.</span>'; return; }
                 list.innerHTML = '';
                 threads.forEach(t => {
+                    const safeTitle = t.title.replace(/'/g, "\\'");
                     list.innerHTML += `
-                    <div onclick="openThread(${t.id}, '${t.title}')" class="bg-[#151515] p-3 rounded border border-gray-800 hover:border-gray-600 cursor-pointer transition-colors">
+                    <div onclick="openThread(${t.id}, '${safeTitle}')" class="bg-[#151515] p-3 rounded border border-gray-800 hover:border-gray-600 cursor-pointer transition-colors">
                         <h4 class="text-white font-bold text-sm mb-1">${t.title}</h4>
                         <span class="text-gray-500 text-xs">Автор: ${t.author} &bull; Ответов: ${t.messages_count}</span>
                     </div>`;
@@ -477,16 +479,55 @@
             } catch(e) { showToast("Ошибка", true); }
         }
 
-        function openThreadModal() { if (!localStorage.getItem('token')) { showToast("Сначала войдите в профиль!", true); openAuthModal('login'); return; } document.getElementById('threadModal').classList.remove('hidden'); }
+        // --- ИСПРАВЛЕНИЕ: МОДАЛКА СОЗДАНИЯ ТЕМЫ ---
+        async function openGlobalThreadModal() {
+            if (!localStorage.getItem('token')) { showToast("Сначала войдите в профиль!", true); openAuthModal('login'); return; }
+            try {
+                const res = await fetch(`${API_BASE}/api/favorites?t=${Date.now()}`, { headers: getHeaders() });
+                const favs = await res.json();
+                if (favs.length === 0) {
+                    showToast("Сначала добавьте игры на полку, чтобы создать по ним обсуждение!", true);
+                    return;
+                }
+                const select = document.getElementById('newThreadGameSelect');
+                select.innerHTML = '<option value="" disabled selected>Выберите игру из коллекции...</option>';
+                favs.forEach(f => { select.innerHTML += `<option value="${f.slug}">${f.name}</option>`; });
+                select.classList.remove('hidden');
+                isGlobalThreadMode = true;
+                document.getElementById('threadModal').classList.remove('hidden');
+            } catch(e) { showToast("Ошибка БД", true); }
+        }
+
+        function openGameThreadModal() { 
+            if (!localStorage.getItem('token')) { showToast("Сначала войдите в профиль!", true); openAuthModal('login'); return; } 
+            document.getElementById('newThreadGameSelect').classList.add('hidden');
+            isGlobalThreadMode = false;
+            document.getElementById('threadModal').classList.remove('hidden'); 
+        }
+
         function closeThreadModal() { document.getElementById('threadModal').classList.add('hidden'); }
+        
         async function submitNewThread() {
             const title = document.getElementById('newThreadTitle').value.trim(); const msg = document.getElementById('newThreadMessage').value.trim();
-            if(!title || !msg) return showToast("Заполните поля", true);
+            
+            let slug = currentGameData?.slug;
+            if (isGlobalThreadMode) {
+                slug = document.getElementById('newThreadGameSelect').value;
+                if (!slug) return showToast("Выберите игру из списка!", true);
+            }
+
+            if(!title || !msg) return showToast("Заполните все поля", true);
+            
             try {
-                const res = await fetch(`${API_BASE}/api/forum/thread`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ game_slug: currentGameData.slug, title: title, message: msg }) });
+                const res = await fetch(`${API_BASE}/api/forum/thread`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ game_slug: slug, title: title, message: msg }) });
                 const data = await res.json();
-                if(data.error) showToast(data.error, true); else { closeThreadModal(); showToast(data.message); loadGameThreads(currentGameData.slug); }
-            } catch(e) { showToast("Ошибка", true); }
+                if(data.error) showToast(data.error, true); 
+                else { 
+                    closeThreadModal(); showToast(data.message); 
+                    document.getElementById('newThreadTitle').value = ''; document.getElementById('newThreadMessage').value = '';
+                    if (isGlobalThreadMode) loadGlobalForum(); else loadGameThreads(slug); 
+                }
+            } catch(e) { showToast("Ошибка сервера", true); }
         }
 
         function openLightbox(idx) { currentScreenshotIndex = idx; const lb = document.getElementById('lightbox'); const lbImg = document.getElementById('lightboxImage'); updateLightbox(); lb.classList.remove('hidden'); setTimeout(() => { lb.classList.remove('opacity-0'); lbImg.classList.remove('lightbox-img-enter'); lbImg.classList.add('lightbox-img-active'); }, 10); document.body.style.overflow = 'hidden'; }
