@@ -26,7 +26,6 @@ app.add_middleware(
 RAWG_API_KEY = "9f57b2917ad04564baecb2015123510a" 
 GOOGLE_CLIENT_ID = "67328762736-1pba95enhuh3c7jvlt38benvhhfruot2.apps.googleusercontent.com"
 
-# Словарь для защиты от спама (Rate Limiting)
 last_message_time = {}
 
 def init_db():
@@ -207,6 +206,23 @@ def create_thread(data: NewThread, authorization: str = Header(None)):
     last_message_time[user["id"]] = current_time
     return {"message": "Тема успешно создана!", "thread_id": thread_id}
 
+# =========================================================
+# ВАЖНО: Этот роут теперь стоит ДО /api/forum/{game_slug},
+# чтобы сервер не путал слово "recent" с названием игры!
+# =========================================================
+@app.get("/api/forum/recent")
+def get_recent_threads():
+    conn = sqlite3.connect("games.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT t.id, t.game_slug, t.title, u.username, t.created_at,
+               (SELECT COUNT(*) FROM messages WHERE thread_id = t.id) as msg_count
+        FROM threads t JOIN users u ON t.author_id = u.id ORDER BY t.created_at DESC LIMIT 25
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"id": r[0], "game_slug": r[1], "title": r[2], "author": r[3], "created_at": r[4], "messages_count": r[5]} for r in rows]
+
 @app.get("/api/forum/{game_slug}")
 def get_game_threads(game_slug: str):
     conn = sqlite3.connect("games.db")
@@ -248,25 +264,11 @@ def add_message(data: ReplyMessage, authorization: str = Header(None)):
     last_message_time[user["id"]] = current_time
     return {"message": "Ответ добавлен!"}
 
-@app.get("/api/forum/recent")
-def get_recent_threads():
-    conn = sqlite3.connect("games.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT t.id, t.game_slug, t.title, u.username, t.created_at,
-               (SELECT COUNT(*) FROM messages WHERE thread_id = t.id) as msg_count
-        FROM threads t JOIN users u ON t.author_id = u.id ORDER BY t.created_at DESC LIMIT 25
-    """)
-    rows = cursor.fetchall()
-    conn.close()
-    return [{"id": r[0], "game_slug": r[1], "title": r[2], "author": r[3], "created_at": r[4], "messages_count": r[5]} for r in rows]
-
 @app.get("/")
 def read_root(): return {"message": "Сервер работает"}
 
 @app.get("/api/top-games")
 def get_top_games(page: int = 1, page_size: int = 15):
-    # ИСПРАВЛЕНИЕ: Теперь сортируем по популярности (добавлениям) и показываем свежие хиты!
     url = f"https://api.rawg.io/api/games?key={RAWG_API_KEY}&dates=2023-01-01,2026-12-31&ordering=-added&page={page}&page_size={page_size}"
     try:
         data = requests.get(url).json()
