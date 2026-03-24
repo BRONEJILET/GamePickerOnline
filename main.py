@@ -26,53 +26,16 @@ app.add_middleware(
 RAWG_API_KEY = "9f57b2917ad04564baecb2015123510a" 
 GOOGLE_CLIENT_ID = "67328762736-1pba95enhuh3c7jvlt38benvhhfruot2.apps.googleusercontent.com"
 
+# Словарь для защиты от спама (Rate Limiting)
 last_message_time = {}
 
 def init_db():
     conn = sqlite3.connect("games.db")
     cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password_hash TEXT,
-            token TEXT,
-            avatar_url TEXT
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS favorites (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            slug TEXT,
-            name TEXT,
-            image_url TEXT,
-            metacritic_score INTEGER,
-            status TEXT DEFAULT 'В планах',
-            FOREIGN KEY(user_id) REFERENCES users(id)
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS threads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            game_slug TEXT,
-            title TEXT,
-            author_id INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(author_id) REFERENCES users(id)
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            thread_id INTEGER,
-            author_id INTEGER,
-            content TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(thread_id) REFERENCES threads(id),
-            FOREIGN KEY(author_id) REFERENCES users(id)
-        )
-    """)
+    cursor.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT, token TEXT, avatar_url TEXT)")
+    cursor.execute("CREATE TABLE IF NOT EXISTS favorites (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, slug TEXT, name TEXT, image_url TEXT, metacritic_score INTEGER, status TEXT DEFAULT 'В планах', FOREIGN KEY(user_id) REFERENCES users(id))")
+    cursor.execute("CREATE TABLE IF NOT EXISTS threads (id INTEGER PRIMARY KEY AUTOINCREMENT, game_slug TEXT, title TEXT, author_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(author_id) REFERENCES users(id))")
+    cursor.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, thread_id INTEGER, author_id INTEGER, content TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(thread_id) REFERENCES threads(id), FOREIGN KEY(author_id) REFERENCES users(id))")
     conn.commit()
     conn.close()
 
@@ -106,30 +69,12 @@ def sanitize_text(text: str):
     if not text: return ""
     return html.escape(text.strip())
 
-class UserAuth(BaseModel):
-    username: str
-    password: str
-
-class GoogleAuth(BaseModel):
-    credential: str
-
-class FavoriteGame(BaseModel):
-    slug: str
-    name: str
-    image_url: str
-    metacritic_score: int | None = None
-
-class UpdateStatus(BaseModel):
-    status: str
-
-class NewThread(BaseModel):
-    game_slug: str
-    title: str
-    message: str
-
-class ReplyMessage(BaseModel):
-    thread_id: int
-    content: str
+class UserAuth(BaseModel): username: str; password: str
+class GoogleAuth(BaseModel): credential: str
+class FavoriteGame(BaseModel): slug: str; name: str; image_url: str; metacritic_score: int | None = None
+class UpdateStatus(BaseModel): status: str
+class NewThread(BaseModel): game_slug: str; title: str; message: str
+class ReplyMessage(BaseModel): thread_id: int; content: str
 
 @app.post("/api/register")
 def register(user: UserAuth):
@@ -139,14 +84,11 @@ def register(user: UserAuth):
     try:
         default_avatar = f"https://api.dicebear.com/7.x/bottts/svg?seed={user.username}"
         new_token = secrets.token_hex(16)
-        cursor.execute("INSERT INTO users (username, password_hash, token, avatar_url) VALUES (?, ?, ?, ?)", 
-                       (user.username, hash_password(user.password), new_token, default_avatar))
+        cursor.execute("INSERT INTO users (username, password_hash, token, avatar_url) VALUES (?, ?, ?, ?)", (user.username, hash_password(user.password), new_token, default_avatar))
         conn.commit()
         return {"message": "Регистрация успешна!"}
-    except sqlite3.IntegrityError:
-        return {"error": "Пользователь с таким именем уже существует!"}
-    finally:
-        conn.close()
+    except sqlite3.IntegrityError: return {"error": "Пользователь с таким именем уже существует!"}
+    finally: conn.close()
 
 @app.post("/api/login")
 def login(user: UserAuth):
@@ -162,8 +104,7 @@ def login(user: UserAuth):
         new_token = secrets.token_hex(16)
         cursor.execute("UPDATE users SET token = ? WHERE id = ?", (new_token, row[0]))
         conn.commit()
-    else:
-        new_token = existing_token
+    else: new_token = existing_token
     conn.close()
     return {"message": "Вход выполнен", "token": new_token, "username": user.username, "avatar_url": row[2]}
 
@@ -180,8 +121,7 @@ def google_login(data: GoogleAuth):
         row = cursor.fetchone()
         if not row:
             new_token = secrets.token_hex(16)
-            cursor.execute("INSERT INTO users (username, password_hash, token, avatar_url) VALUES (?, ?, ?, ?)", 
-                           (email, "GOOGLE_AUTH_NO_PASSWORD", new_token, avatar))
+            cursor.execute("INSERT INTO users (username, password_hash, token, avatar_url) VALUES (?, ?, ?, ?)", (email, "GOOGLE_AUTH_NO_PASSWORD", new_token, avatar))
             conn.commit()
         else:
             user_id = row[0]
@@ -192,8 +132,7 @@ def google_login(data: GoogleAuth):
             conn.commit()
         conn.close()
         return {"message": "Вход через Google успешен!", "token": new_token, "username": name, "avatar_url": avatar}
-    except ValueError:
-        return {"error": "Недействительный токен Google!"}
+    except ValueError: return {"error": "Недействительный токен Google!"}
 
 @app.get("/api/user-info")
 def get_user_info(authorization: str = Header(None)):
@@ -222,8 +161,7 @@ def add_favorite(game: FavoriteGame, authorization: str = Header(None)):
     if cursor.fetchone():
         conn.close()
         return {"error": "Эта игра уже есть в вашем списке!"}
-    cursor.execute("INSERT INTO favorites (user_id, slug, name, image_url, metacritic_score, status) VALUES (?, ?, ?, ?, ?, 'В планах')", 
-                   (user["id"], game.slug, game.name, game.image_url, game.metacritic_score))
+    cursor.execute("INSERT INTO favorites (user_id, slug, name, image_url, metacritic_score, status) VALUES (?, ?, ?, ?, ?, 'В планах')", (user["id"], game.slug, game.name, game.image_url, game.metacritic_score))
     conn.commit()
     conn.close()
     return {"message": "Игра успешно добавлена в избранное!"}
@@ -250,14 +188,12 @@ def update_status(game_slug: str, data: UpdateStatus, authorization: str = Heade
     conn.close()
     return {"message": "Статус обновлен!"}
 
-# ==================== ФОРУМ ====================
 @app.post("/api/forum/thread")
 def create_thread(data: NewThread, authorization: str = Header(None)):
     token = authorization.replace("Bearer ", "") if authorization else None
     user = get_user_by_token(token)
     current_time = time.time()
-    if user["id"] in last_message_time and current_time - last_message_time[user["id"]] < 10:
-        return {"error": "Слишком частые запросы."}
+    if user["id"] in last_message_time and current_time - last_message_time[user["id"]] < 10: return {"error": "Слишком частые запросы."}
     safe_title = sanitize_text(data.title)
     safe_message = sanitize_text(data.message)
     if len(safe_title) < 3 or len(safe_message) < 3: return {"error": "Слишком короткий текст."}
@@ -296,14 +232,12 @@ def get_thread_messages(thread_id: int):
     conn.close()
     return [{"id": r[0], "author": r[1], "avatar_url": r[2], "content": r[3], "created_at": r[4]} for r in rows]
 
-# НОВЫЙ РОУТ: Добавление ответа в тему
 @app.post("/api/forum/message")
 def add_message(data: ReplyMessage, authorization: str = Header(None)):
     token = authorization.replace("Bearer ", "") if authorization else None
     user = get_user_by_token(token)
     current_time = time.time()
-    if user["id"] in last_message_time and current_time - last_message_time[user["id"]] < 5:
-        return {"error": "Подождите пару секунд перед отправкой."}
+    if user["id"] in last_message_time and current_time - last_message_time[user["id"]] < 5: return {"error": "Подождите пару секунд перед отправкой."}
     safe_content = sanitize_text(data.content)
     if len(safe_content) < 2: return {"error": "Слишком короткий текст."}
     conn = sqlite3.connect("games.db")
@@ -314,7 +248,6 @@ def add_message(data: ReplyMessage, authorization: str = Header(None)):
     last_message_time[user["id"]] = current_time
     return {"message": "Ответ добавлен!"}
 
-# НОВЫЙ РОУТ: Глобальный форум (последние обсуждения)
 @app.get("/api/forum/recent")
 def get_recent_threads():
     conn = sqlite3.connect("games.db")
@@ -328,15 +261,13 @@ def get_recent_threads():
     conn.close()
     return [{"id": r[0], "game_slug": r[1], "title": r[2], "author": r[3], "created_at": r[4], "messages_count": r[5]} for r in rows]
 
-# ==========================================
-# RAWG & STEAM
-# ==========================================
 @app.get("/")
 def read_root(): return {"message": "Сервер работает"}
 
 @app.get("/api/top-games")
 def get_top_games(page: int = 1, page_size: int = 15):
-    url = f"https://api.rawg.io/api/games?key={RAWG_API_KEY}&ordering=-metacritic&page={page}&page_size={page_size}"
+    # ИСПРАВЛЕНИЕ: Теперь сортируем по популярности (добавлениям) и показываем свежие хиты!
+    url = f"https://api.rawg.io/api/games?key={RAWG_API_KEY}&dates=2023-01-01,2026-12-31&ordering=-added&page={page}&page_size={page_size}"
     try:
         data = requests.get(url).json()
         return [{"slug": i.get("slug"), "name": i.get("name"), "image_url": i.get("background_image"), "metacritic_score": i.get("metacritic"), "release_date": i.get("released")} for i in data.get("results", [])]
