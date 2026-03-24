@@ -3,46 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GamePickerOnline</title>
+    <title>GamePickerOnline | RAWG Style</title>
     <link rel="icon" type="image/jpeg" href="Logo.jpg">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         .fade-in { animation: fadeIn 0.4s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .game-card:hover { transform: translateY(-5px); transition: transform 0.3s ease; }
-        .heart-pop { animation: pop 0.3s ease-in-out; }
-        @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.3); } 100% { transform: scale(1); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .game-card:hover { transform: scale(1.02); transition: transform 0.2s ease; }
         #toast { transition: opacity 0.3s, transform 0.3s; }
-        .modal-bg { background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); }
-        #lightbox { backdrop-filter: blur(10px); }
-        .lightbox-img-enter { transform: scale(0.9); opacity: 0; }
-        .lightbox-img-active { transform: scale(1); opacity: 1; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .modal-bg { background-color: rgba(0, 0, 0, 0.85); backdrop-filter: blur(4px); }
+        #lightbox { backdrop-filter: blur(8px); }
+        .lightbox-img-enter { transform: scale(0.95); opacity: 0; }
+        .lightbox-img-active { transform: scale(1); opacity: 1; transition: all 0.3s ease-out; }
         select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
+        
+        /* Кастомный скроллбар в стиле RAWG */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #151515; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
     </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen font-sans pb-12 relative">
+<body class="bg-[#151515] text-[#E0E0E0] min-h-screen font-sans pb-12 relative overflow-x-hidden">
 
-    <div id="toast" class="fixed top-5 right-5 bg-purple-600 text-white px-6 py-3 rounded-xl shadow-lg shadow-purple-500/50 font-semibold opacity-0 translate-y-[-20px] pointer-events-none z-50">Уведомление</div>
+    <div id="toast" class="fixed top-5 right-5 bg-white text-black px-6 py-3 rounded shadow-lg font-bold opacity-0 translate-y-[-20px] pointer-events-none z-[200]">Уведомление</div>
 
-    <div id="authModal" class="fixed inset-0 modal-bg hidden flex items-center justify-center z-50 fade-in">
-        <div class="bg-gray-800 p-8 rounded-3xl shadow-2xl border border-gray-700 w-full max-w-md relative text-center">
-            <button onclick="closeAuthModal()" class="absolute top-4 right-5 text-gray-400 hover:text-white text-2xl">✕</button>
-            <h2 id="authTitle" class="text-3xl font-bold mb-6 text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">Вход в аккаунт</h2>
+    <div id="authModal" class="fixed inset-0 modal-bg hidden flex items-center justify-center z-[150] fade-in">
+        <div class="bg-[#202020] p-8 rounded shadow-2xl border border-gray-700 w-full max-w-md relative text-center">
+            <button onclick="closeAuthModal()" class="absolute top-4 right-5 text-gray-500 hover:text-white text-2xl">✕</button>
+            <h2 id="authTitle" class="text-3xl font-black mb-6 text-white tracking-wide uppercase">ВХОД</h2>
             
-            <input type="text" id="authUsername" placeholder="Логин" class="w-full px-4 py-3 mb-4 rounded-xl bg-gray-900 border border-gray-700 text-white focus:outline-none focus:border-purple-500 text-left">
-            <input type="password" id="authPassword" placeholder="Пароль (от 6 символов)" class="w-full px-4 py-3 mb-6 rounded-xl bg-gray-900 border border-gray-700 text-white focus:outline-none focus:border-purple-500 text-left">
-            <button id="authBtn" onclick="submitAuth()" class="w-full py-3 bg-purple-600 hover:bg-purple-700 rounded-xl font-bold text-lg shadow-lg shadow-purple-500/30 transition-colors mb-4">Войти</button>
+            <input type="text" id="authUsername" placeholder="Логин" class="w-full px-4 py-3 mb-4 rounded bg-[#151515] border border-gray-700 text-white focus:outline-none focus:border-gray-400 text-left">
+            <input type="password" id="authPassword" placeholder="Пароль (от 6 символов)" class="w-full px-4 py-3 mb-6 rounded bg-[#151515] border border-gray-700 text-white focus:outline-none focus:border-gray-400 text-left">
+            <button id="authBtn" onclick="submitAuth()" class="w-full py-3 bg-white text-black hover:bg-gray-200 rounded font-black text-lg transition-colors mb-4 uppercase tracking-wider">Войти</button>
             
             <p class="text-center text-gray-400 text-sm mb-4">
                 <span id="authToggleText">Нет аккаунта?</span> 
-                <button onclick="toggleAuthMode()" id="authToggleBtn" class="text-purple-400 hover:text-purple-300 font-semibold ml-1">Зарегистрироваться</button>
+                <button onclick="toggleAuthMode()" id="authToggleBtn" class="text-white hover:text-gray-300 font-bold ml-1 uppercase">Регистрация</button>
             </p>
 
             <div class="flex items-center my-4">
-                <div class="flex-grow border-t border-gray-600"></div>
-                <span class="px-3 text-gray-400 text-sm font-semibold uppercase">или</span>
-                <div class="flex-grow border-t border-gray-600"></div>
+                <div class="flex-grow border-t border-gray-700"></div>
+                <span class="px-3 text-gray-500 text-sm font-bold uppercase">или</span>
+                <div class="flex-grow border-t border-gray-700"></div>
             </div>
 
             <div id="g_id_onload" data-client_id="67328762736-1pba95enhuh3c7jvlt38benvhhfruot2.apps.googleusercontent.com" data-context="signin" data-ux_mode="popup" data-callback="handleGoogleLogin" data-auto_prompt="false"></div>
@@ -50,108 +54,120 @@
         </div>
     </div>
 
+    <div id="threadModal" class="fixed inset-0 modal-bg hidden flex items-center justify-center z-[150] fade-in">
+        <div class="bg-[#202020] p-8 rounded shadow-2xl border border-gray-700 w-full max-w-lg relative">
+            <button onclick="closeThreadModal()" class="absolute top-4 right-5 text-gray-500 hover:text-white text-2xl">✕</button>
+            <h2 class="text-2xl font-black mb-6 text-white uppercase tracking-wide">Новое обсуждение</h2>
+            <input type="text" id="newThreadTitle" placeholder="Заголовок темы" class="w-full px-4 py-3 mb-4 rounded bg-[#151515] border border-gray-700 text-white focus:outline-none focus:border-gray-400">
+            <textarea id="newThreadMessage" placeholder="Ваше сообщение..." class="w-full px-4 py-3 mb-6 rounded bg-[#151515] border border-gray-700 text-white focus:outline-none focus:border-gray-400 h-32 resize-none"></textarea>
+            <button onclick="submitNewThread()" class="w-full py-3 bg-white text-black hover:bg-gray-200 rounded font-black text-lg transition-colors uppercase tracking-wider">Создать тему</button>
+        </div>
+    </div>
+
     <div id="lightbox" class="fixed inset-0 bg-black/95 z-[100] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
         <button onclick="closeLightbox()" class="absolute top-5 right-6 text-white/50 hover:text-white text-5xl font-light transition-colors z-20 select-none">&times;</button>
         <button onclick="prevScreenshot(event)" class="absolute left-2 md:left-8 text-white/30 hover:text-white text-6xl font-light transition-colors select-none p-4 z-20">&lsaquo;</button>
-        <img id="lightboxImage" src="" class="max-h-[90vh] max-w-[85vw] object-contain shadow-2xl rounded-xl z-10 lightbox-img-enter mx-auto">
+        <img id="lightboxImage" src="" class="max-h-[90vh] max-w-[85vw] object-contain shadow-2xl rounded z-10 lightbox-img-enter mx-auto">
         <button onclick="nextScreenshot(event)" class="absolute right-2 md:right-8 text-white/30 hover:text-white text-6xl font-light transition-colors select-none p-4 z-20">&rsaquo;</button>
-        <div id="lightboxCounter" class="absolute bottom-6 text-white/50 font-semibold tracking-widest text-sm z-20"></div>
+        <div id="lightboxCounter" class="absolute bottom-6 text-white/50 font-bold tracking-widest text-sm z-20"></div>
     </div>
 
-    <div class="container mx-auto px-4 py-8 max-w-6xl">
-        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-            <h1 class="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 cursor-pointer" onclick="returnToMain()">
-                GamePickerOnline
+    <div class="container mx-auto px-4 py-6 max-w-6xl">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4 border-b border-gray-800 pb-6">
+            <h1 class="text-3xl md:text-4xl font-black text-white cursor-pointer tracking-tighter uppercase hover:text-gray-300 transition-colors" onclick="returnToMain()">
+                GamePicker<span class="text-gray-500">Online</span>
             </h1>
-            <div class="flex items-center gap-3">
-                <button onclick="loadCabinet()" class="px-5 py-2 bg-gray-800 border border-gray-700 hover:bg-gray-700 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg">
-                    <span>🎮</span> Мой Кабинет
-                </button>
-                <div id="userPanel" class="flex items-center gap-3 border-l border-gray-700 pl-3">
-                    <button onclick="openAuthModal('login')" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold transition-colors shadow-lg shadow-blue-500/30">Войти</button>
+            <div class="flex items-center gap-2 md:gap-4 flex-wrap justify-center">
+                <button onclick="loadGlobalForum()" class="px-4 py-2 bg-[#202020] hover:bg-[#2a2a2a] rounded font-bold transition-colors text-sm uppercase tracking-wider border border-gray-800">Форум</button>
+                <button onclick="loadCabinet()" class="px-4 py-2 bg-[#202020] hover:bg-[#2a2a2a] rounded font-bold transition-colors text-sm uppercase tracking-wider border border-gray-800">Коллекция</button>
+                <div id="userPanel" class="flex items-center gap-3 border-l border-gray-700 pl-3 md:pl-4">
+                    <button onclick="openAuthModal('login')" class="px-5 py-2 bg-white text-black hover:bg-gray-200 rounded font-black transition-colors text-sm uppercase">Войти</button>
                 </div>
             </div>
         </div>
         
-        <p id="mainSubtitle" class="text-gray-400 text-center mb-10 text-lg">Популярные игры и оценки критиков</p>
-
-        <div id="cabinetHeader" class="hidden fade-in bg-gray-800 rounded-3xl p-6 mb-10 border border-gray-700 shadow-xl flex flex-col md:flex-row items-center gap-6">
-            <img id="cabinetAvatar" src="" class="w-24 h-24 rounded-full border-4 border-purple-500 shadow-lg object-cover">
-            <div class="text-center md:text-left">
-                <h2 id="cabinetUsername" class="text-3xl font-bold text-white mb-2">Username</h2>
-                <div class="flex gap-4 text-sm text-gray-400 font-medium justify-center md:justify-start">
-                    <span class="bg-gray-900 px-3 py-1 rounded-lg border border-gray-700">Всего игр: <span id="cabinetTotalGames" class="text-purple-400">0</span></span>
-                </div>
-            </div>
-            <div class="md:ml-auto">
-                <button onclick="returnToMain()" class="px-6 py-3 bg-gray-900 hover:bg-black rounded-xl font-bold transition-colors shadow-lg border border-gray-700 text-white flex items-center gap-2">
-                    ← Искать игры
-                </button>
-            </div>
-        </div>
-
         <div id="mainView" class="fade-in">
-            <div id="searchBlock" class="flex gap-4 mb-12 max-w-3xl mx-auto">
-                <input type="text" id="gameInput" placeholder="Введите название игры (напр. gta, witcher, doom)" class="w-full px-4 py-3 rounded-xl bg-gray-800 border border-gray-700 text-white focus:outline-none focus:border-purple-500 transition-colors shadow-lg">
-                <button onclick="searchGame()" class="px-8 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 font-bold transition-colors shadow-lg shadow-purple-500/30">Найти</button>
+            <div id="searchBlock" class="flex gap-2 mb-8 max-w-2xl mx-auto">
+                <input type="text" id="gameInput" placeholder="Поиск 500,000+ игр..." class="w-full px-4 py-3 rounded bg-[#202020] border border-gray-800 text-white focus:outline-none focus:border-gray-500 transition-colors placeholder-gray-600">
+                <button onclick="startSearch()" class="px-8 py-3 rounded bg-white text-black hover:bg-gray-200 font-black transition-colors uppercase tracking-wider">Найти</button>
             </div>
-            <div id="statusMessage" class="text-center text-purple-400 font-semibold mb-8 text-xl">Загружаем популярные игры...</div>
-            <div id="gamesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+            <h2 id="mainSubtitle" class="text-3xl font-black text-white mb-6 uppercase tracking-tight">Популярное</h2>
+            <div id="gamesGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+            <div id="loadingIndicator" class="text-center font-bold text-gray-500 my-8 hidden uppercase tracking-widest">Загрузка...</div>
         </div>
 
-        <div id="detailView" class="hidden fade-in bg-gray-800 rounded-3xl overflow-hidden shadow-2xl border border-gray-700 max-w-4xl mx-auto">
-            <button onclick="closeGameDetails()" class="absolute mt-4 ml-4 px-4 py-2 bg-black/50 hover:bg-black/80 rounded-lg text-white font-semibold backdrop-blur-sm transition-all z-10">← Назад</button>
-            <div class="relative"><img id="detailImage" src="" alt="Cover" class="w-full h-80 object-cover border-b border-gray-700"></div>
+        <div id="cabinetView" class="hidden fade-in">
+            <div class="bg-[#202020] rounded p-6 mb-8 border border-gray-800 flex flex-col md:flex-row items-center gap-6">
+                <img id="cabinetAvatar" src="" class="w-20 h-20 rounded border-2 border-gray-600 object-cover">
+                <div class="text-center md:text-left">
+                    <h2 id="cabinetUsername" class="text-3xl font-black text-white uppercase tracking-tight">User</h2>
+                    <p class="text-sm text-gray-400 font-bold uppercase mt-1">Игр на полке: <span id="cabinetTotalGames" class="text-white">0</span></p>
+                </div>
+            </div>
+            <h2 class="text-2xl font-black text-white mb-6 uppercase tracking-tight">Моя полка</h2>
+            <div id="cabinetGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+
+        <div id="globalForumView" class="hidden fade-in">
+            <h2 class="text-3xl font-black text-white mb-6 uppercase tracking-tight">Обсуждения сообщества</h2>
+            <div id="globalForumList" class="flex flex-col gap-3"></div>
+        </div>
+
+        <div id="threadView" class="hidden fade-in max-w-3xl mx-auto">
+            <button onclick="returnToGlobalForum()" class="mb-4 text-gray-500 hover:text-white font-bold uppercase text-sm flex items-center gap-1">← Назад к форуму</button>
+            <div class="bg-[#202020] rounded p-6 border border-gray-800 mb-6">
+                <h2 id="threadTitle" class="text-2xl font-black text-white mb-2 leading-tight">Загрузка...</h2>
+            </div>
+            <div id="threadMessages" class="flex flex-col gap-4 mb-6"></div>
             
-            <div class="p-8">
-                <div class="flex justify-between items-start mb-6">
-                    <div>
-                        <h2 id="detailTitle" class="text-4xl font-bold mb-2">Название Игры</h2>
-                        <p id="detailDevelopers" class="text-purple-400 font-medium">Студия: </p>
-                        <p id="detailDate" class="text-gray-400 text-sm mt-1">Дата выхода: </p>
-                    </div>
-                    <div id="detailMeta" class="flex-shrink-0 flex items-center justify-center w-16 h-16 rounded-full font-bold text-2xl border-4 shadow-lg bg-gray-900/50"></div>
-                </div>
+            <div class="bg-[#202020] rounded p-4 border border-gray-800 flex gap-2">
+                <input type="text" id="replyInput" placeholder="Написать ответ..." class="w-full px-4 py-3 rounded bg-[#151515] border border-gray-700 text-white focus:outline-none focus:border-gray-500">
+                <button onclick="submitReply()" class="px-6 py-3 rounded bg-[#43A047] text-white hover:bg-green-600 font-black transition-colors uppercase tracking-wider">Send</button>
+            </div>
+        </div>
 
-                <div class="mb-8">
-                    <h3 class="text-xl font-semibold mb-3 border-b border-gray-700 pb-2">Описание</h3>
-                    <p id="detailDescription" class="text-gray-300 leading-relaxed whitespace-pre-line"></p>
-                </div>
+        <div id="detailView" class="hidden fade-in max-w-5xl mx-auto">
+            <button onclick="returnToMain()" class="mb-4 text-gray-500 hover:text-white font-bold uppercase text-sm flex items-center gap-1">← Назад</button>
+            <div class="bg-[#202020] rounded overflow-hidden border border-gray-800">
+                <div class="relative"><img id="detailImage" src="" class="w-full h-[400px] object-cover opacity-80"></div>
                 
-                <div id="pcRequirements" class="mb-8 hidden">
-                    <h3 class="text-xl font-semibold mb-3 border-b border-gray-700 pb-2 text-blue-400">Системные требования (PC)</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="bg-gray-900/50 p-5 rounded-xl border border-gray-700 shadow-inner">
-                            <h4 class="font-bold text-gray-300 mb-2">Минимальные:</h4>
-                            <p id="detailReqMin" class="text-sm text-gray-400 whitespace-pre-line leading-relaxed"></p>
+                <div class="p-6 md:p-10">
+                    <div class="flex justify-between items-start mb-6">
+                        <div>
+                            <h2 id="detailTitle" class="text-4xl md:text-5xl font-black text-white uppercase tracking-tighter leading-none mb-3">Игра</h2>
+                            <p id="detailDevelopers" class="text-gray-400 font-bold text-sm uppercase">Студия: </p>
+                            <p id="detailDate" class="text-gray-500 text-sm mt-1 uppercase font-bold">Релиз: </p>
                         </div>
-                        <div class="bg-gray-900/50 p-5 rounded-xl border border-gray-700 shadow-inner">
-                            <h4 class="font-bold text-gray-300 mb-2">Рекомендуемые:</h4>
-                            <p id="detailReqRec" class="text-sm text-gray-400 whitespace-pre-line leading-relaxed"></p>
-                        </div>
+                        <div id="detailMeta" class="flex-shrink-0 flex items-center justify-center w-16 h-16 rounded font-black text-2xl border-2 bg-[#151515]"></div>
                     </div>
-                </div>
 
-                <div id="screenshotsBlock" class="mb-8 hidden">
-                    <h3 class="text-xl font-semibold mb-3 border-b border-gray-700 pb-2 text-blue-400">Скриншоты</h3>
-                    <div id="screenshotsContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
-                </div>
-
-                <div id="steamReviewsBlock" class="mb-8 hidden">
-                    <h3 class="text-xl font-semibold mb-3 border-b border-gray-700 pb-2 text-blue-400">Отзывы игроков (Steam)</h3>
-                    <div id="steamReviewsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-                </div>
-                
-                <div class="flex flex-col md:flex-row justify-between items-center gap-6 mt-10">
-                    <div><h3 class="text-sm text-gray-400 uppercase tracking-wider mb-2">Платформы</h3><div id="detailPlatforms" class="flex flex-wrap gap-2"></div></div>
-                    
-                    <div class="flex flex-wrap gap-3 mt-4 md:mt-0">
-                        <button id="btnFavorite" onclick="addToFavorites()" class="px-6 py-3 bg-pink-600 hover:bg-pink-700 rounded-xl font-bold transition-colors shadow-lg shadow-pink-500/30 whitespace-nowrap flex items-center gap-2">
-                            <span>🤍</span> Добавить на полку
+                    <div class="flex flex-wrap gap-3 mb-10">
+                        <button id="btnFavorite" onclick="addToFavorites()" class="px-6 py-3 bg-white text-black hover:bg-gray-300 rounded font-black transition-colors uppercase tracking-wider text-sm flex items-center gap-2">
+                            + ДОБАВИТЬ В КОЛЛЕКЦИЮ
                         </button>
-                        
-                        <a id="detailMetacritic" href="#" target="_blank" class="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-gray-900 rounded-xl font-bold transition-colors shadow-lg shadow-yellow-500/30 whitespace-nowrap hidden">Metacritic ↗</a>
-                        <a id="detailWebsite" href="#" target="_blank" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition-colors shadow-lg shadow-blue-500/30 whitespace-nowrap hidden">Сайт ↗</a>
+                    </div>
+
+                    <div class="mb-10">
+                        <h3 class="text-lg font-black text-white mb-4 uppercase tracking-widest border-b border-gray-800 pb-2">Об игре</h3>
+                        <p id="detailDescription" class="text-gray-300 leading-relaxed text-sm md:text-base whitespace-pre-line"></p>
+                    </div>
+
+                    <div id="screenshotsBlock" class="mb-10 hidden">
+                        <h3 class="text-lg font-black text-white mb-4 uppercase tracking-widest border-b border-gray-800 pb-2">Медиа</h3>
+                        <div id="screenshotsContainer" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
+                    </div>
+
+                    <div id="steamReviewsBlock" class="mb-10 hidden">
+                        <h3 class="text-lg font-black text-white mb-4 uppercase tracking-widest border-b border-gray-800 pb-2">Steam Отзывы</h3>
+                        <div id="steamReviewsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+                    </div>
+
+                    <div id="gameForumBlock" class="mb-10">
+                        <div class="flex justify-between items-end border-b border-gray-800 pb-2 mb-4">
+                            <h3 class="text-lg font-black text-white uppercase tracking-widest">Обсуждения</h3>
+                            <button onclick="openThreadModal()" class="text-[#43A047] hover:text-green-400 font-bold uppercase text-xs tracking-wider">+ Создать</button>
+                        </div>
+                        <div id="gameForumList" class="flex flex-col gap-2"></div>
                     </div>
                 </div>
             </div>
@@ -166,88 +182,18 @@
         let isLoginMode = true; 
         let currentScreenshots = [];
         let currentScreenshotIndex = 0;
+        
+        // Кэш избранных игр для быстрого изменения цвета кнопки
+        let favoriteSlugs = new Set();
+        
+        // Пагинация
+        let currentPage = 1;
+        let isFetching = false;
+        let hasMoreGames = true;
+        let currentSearchQuery = '';
+        let currentView = 'main'; // main, detail, cabinet, globalForum, thread
 
-        function checkAuth() {
-            const token = localStorage.getItem('token');
-            const username = localStorage.getItem('username');
-            const avatar = localStorage.getItem('avatar_url') || `https://api.dicebear.com/7.x/bottts/svg?seed=${username}`;
-            const userPanel = document.getElementById('userPanel');
-            if (token && username) {
-                userPanel.innerHTML = `
-                    <img src="${avatar}" class="w-10 h-10 rounded-full border-2 border-purple-500 object-cover hidden md:block">
-                    <button onclick="logout()" class="px-4 py-2 bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white rounded-xl font-semibold transition-colors">Выйти</button>
-                `;
-            } else {
-                userPanel.innerHTML = `<button onclick="openAuthModal('login')" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold transition-colors shadow-lg shadow-blue-500/30">Войти</button>`;
-            }
-        }
-
-        function openAuthModal(mode) {
-            document.getElementById('authModal').classList.remove('hidden');
-            if (mode === 'register') { isLoginMode = false; toggleAuthMode(true); } 
-            else { isLoginMode = true; toggleAuthMode(true); }
-        }
-
-        function closeAuthModal() {
-            document.getElementById('authModal').classList.add('hidden');
-            document.getElementById('authUsername').value = ''; document.getElementById('authPassword').value = '';
-        }
-
-        function toggleAuthMode(forceUpdate = false) {
-            if (!forceUpdate) isLoginMode = !isLoginMode;
-            document.getElementById('authTitle').textContent = isLoginMode ? 'Вход в аккаунт' : 'Создать аккаунт';
-            document.getElementById('authBtn').textContent = isLoginMode ? 'Войти' : 'Зарегистрироваться';
-            document.getElementById('authToggleText').textContent = isLoginMode ? 'Нет аккаунта?' : 'Уже есть аккаунт?';
-            document.getElementById('authToggleBtn').textContent = isLoginMode ? 'Зарегистрироваться' : 'Войти';
-            const googleBlock = document.querySelector('.g_id_signin');
-            if (googleBlock) googleBlock.style.display = isLoginMode ? 'block' : 'none';
-        }
-
-        async function submitAuth() {
-            const username = document.getElementById('authUsername').value.trim();
-            const password = document.getElementById('authPassword').value.trim();
-            if (!username || !password) return showToast("Заполните все поля", true);
-
-            const endpoint = isLoginMode ? '/api/login' : '/api/register';
-            try {
-                const response = await fetch(`${API_BASE}${endpoint}`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password })
-                });
-                const data = await response.json();
-                if (data.error) showToast(data.error, true);
-                else {
-                    showToast(data.message);
-                    if (isLoginMode) {
-                        localStorage.setItem('token', data.token); 
-                        localStorage.setItem('username', data.username);
-                        localStorage.setItem('avatar_url', data.avatar_url);
-                        closeAuthModal(); checkAuth();
-                    } else toggleAuthMode();
-                }
-            } catch (error) { showToast("Ошибка сервера", true); }
-        }
-
-        async function handleGoogleLogin(response) {
-            try {
-                const res = await fetch(`${API_BASE}/api/google-login`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential: response.credential })
-                });
-                const data = await res.json();
-                if (data.error) showToast(data.error, true);
-                else {
-                    showToast(data.message);
-                    localStorage.setItem('token', data.token);
-                    localStorage.setItem('username', data.username);
-                    localStorage.setItem('avatar_url', data.avatar_url);
-                    closeAuthModal(); checkAuth();
-                }
-            } catch (error) { showToast("Ошибка связи с сервером", true); }
-        }
-
-        function logout() {
-            localStorage.clear(); checkAuth(); showToast("Вы вышли из аккаунта"); returnToMain(); 
-        }
-
+        // --- УТИЛИТЫ ---
         function getHeaders() {
             const token = localStorage.getItem('token');
             return token ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` } : { 'Content-Type': 'application/json' };
@@ -256,58 +202,394 @@
         function showToast(message, isError = false) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
-            toast.className = `fixed top-5 right-5 px-6 py-3 rounded-xl shadow-lg font-semibold transition-all z-50 ${isError ? 'bg-red-500 shadow-red-500/50' : 'bg-green-500 shadow-green-500/50'}`;
+            toast.className = `fixed top-5 right-5 px-6 py-3 rounded shadow-lg font-bold transition-all z-[200] ${isError ? 'bg-red-600 text-white' : 'bg-white text-black'}`;
             toast.style.opacity = '1'; toast.style.transform = 'translateY(0)';
             setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(-20px)'; }, 3000);
         }
 
-        function getScoreColorClass(s) { return !s ? 'border-gray-500 text-gray-500' : s>=80 ? 'border-green-500 text-green-500' : s>=50 ? 'border-yellow-500 text-yellow-500' : 'border-red-500 text-red-500'; }
+        function getScoreColorClass(s) { return !s ? 'border-gray-700 text-gray-500' : s>=80 ? 'border-[#43A047] text-[#43A047]' : s>=50 ? 'border-yellow-500 text-yellow-500' : 'border-red-500 text-red-500'; }
 
-        // --- ОБНОВЛЕННАЯ КАРТОЧКА ИГРЫ С ВЫБОРОМ СТАТУСА ---
-        function createGameCardHTML(game, isCabinet = false) {
+        // --- АВТОРИЗАЦИЯ ---
+        async function checkAuth() {
+            const token = localStorage.getItem('token');
+            const username = localStorage.getItem('username');
+            const avatar = localStorage.getItem('avatar_url') || `https://api.dicebear.com/7.x/bottts/svg?seed=${username}`;
+            const userPanel = document.getElementById('userPanel');
+            if (token && username) {
+                userPanel.innerHTML = `
+                    <img src="${avatar}" class="w-8 h-8 rounded border border-gray-600 object-cover hidden md:block">
+                    <button onclick="logout()" class="px-4 py-2 bg-red-900/30 text-red-400 hover:bg-red-900 hover:text-white rounded font-bold transition-colors text-sm uppercase">Выйти</button>
+                `;
+                // Тихо подгружаем избранное, чтобы знать, какие кнопки красить в зеленый
+                try {
+                    const res = await fetch(`${API_BASE}/api/favorites`, { headers: getHeaders() });
+                    if(res.ok) {
+                        const favs = await res.json();
+                        favoriteSlugs = new Set(favs.map(f => f.slug));
+                    }
+                } catch(e) {}
+            } else {
+                favoriteSlugs.clear();
+                userPanel.innerHTML = `<button onclick="openAuthModal('login')" class="px-5 py-2 bg-white text-black hover:bg-gray-200 rounded font-black transition-colors text-sm uppercase">Войти</button>`;
+            }
+        }
+
+        function openAuthModal(mode) {
+            document.getElementById('authModal').classList.remove('hidden');
+            isLoginMode = mode !== 'register'; toggleAuthMode(true);
+        }
+        function closeAuthModal() { document.getElementById('authModal').classList.add('hidden'); }
+        function toggleAuthMode(forceUpdate = false) {
+            if (!forceUpdate) isLoginMode = !isLoginMode;
+            document.getElementById('authTitle').textContent = isLoginMode ? 'ВХОД' : 'РЕГИСТРАЦИЯ';
+            document.getElementById('authBtn').textContent = isLoginMode ? 'Войти' : 'Создать';
+            document.getElementById('authToggleText').textContent = isLoginMode ? 'Нет аккаунта?' : 'Уже есть аккаунт?';
+            document.getElementById('authToggleBtn').textContent = isLoginMode ? 'Регистрация' : 'Войти';
+            const googleBlock = document.querySelector('.g_id_signin');
+            if (googleBlock) googleBlock.style.display = isLoginMode ? 'block' : 'none';
+        }
+
+        async function submitAuth() {
+            const username = document.getElementById('authUsername').value.trim();
+            const password = document.getElementById('authPassword').value.trim();
+            if (!username || !password) return showToast("Заполните все поля", true);
+            const endpoint = isLoginMode ? '/api/login' : '/api/register';
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+                const data = await response.json();
+                if (data.error) showToast(data.error, true);
+                else {
+                    showToast(data.message);
+                    if (isLoginMode) {
+                        localStorage.setItem('token', data.token); localStorage.setItem('username', data.username); localStorage.setItem('avatar_url', data.avatar_url);
+                        closeAuthModal(); checkAuth();
+                    } else toggleAuthMode();
+                }
+            } catch (error) { showToast("Ошибка сервера", true); }
+        }
+
+        async function handleGoogleLogin(response) {
+            try {
+                const res = await fetch(`${API_BASE}/api/google-login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential: response.credential }) });
+                const data = await res.json();
+                if (data.error) showToast(data.error, true);
+                else {
+                    showToast(data.message);
+                    localStorage.setItem('token', data.token); localStorage.setItem('username', data.username); localStorage.setItem('avatar_url', data.avatar_url);
+                    closeAuthModal(); checkAuth();
+                }
+            } catch (error) { showToast("Ошибка связи", true); }
+        }
+
+        function logout() { localStorage.clear(); checkAuth(); showToast("Вы вышли из аккаунта"); returnToMain(); }
+
+        // --- НАВИГАЦИЯ ---
+        function hideAllViews() {
+            ['mainView', 'detailView', 'cabinetView', 'globalForumView', 'threadView'].forEach(id => document.getElementById(id).classList.add('hidden'));
+        }
+
+        function returnToMain() {
+            hideAllViews(); currentView = 'main';
+            document.getElementById('mainView').classList.remove('hidden');
+            if(document.getElementById('gamesGrid').innerHTML === '') loadGames(true);
+        }
+
+        // --- БЕСКОНЕЧНАЯ ЛЕНТА (ГЛАВНЫЙ ЭКРАН) ---
+        function createGameCardHTML(game) {
             const scoreClass = getScoreColorClass(game.metacritic_score);
             const scoreText = game.metacritic_score || 'N/A';
-            
-            let extraControls = '';
-            if (isCabinet) {
-                extraControls = `
-                    <div class="mt-4 pt-3 border-t border-gray-700 flex justify-between items-center" onclick="event.stopPropagation();">
-                        <select onchange="updateGameStatus('${game.slug}', this.value)" class="bg-gray-900 border border-gray-600 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-purple-500 cursor-pointer">
-                            <option value="В планах" ${game.status === 'В планах' ? 'selected' : ''}>⏳ В планах</option>
-                            <option value="Играю" ${game.status === 'Играю' ? 'selected' : ''}>🔥 Играю</option>
-                            <option value="Пройдено" ${game.status === 'Пройдено' ? 'selected' : ''}>🏆 Пройдено</option>
-                            <option value="Брошено" ${game.status === 'Брошено' ? 'selected' : ''}>💔 Брошено</option>
-                        </select>
-                        <button onclick="removeFromFavorites('${game.slug}')" class="text-red-500 hover:text-red-400 text-sm font-bold bg-red-500/10 px-3 py-1.5 rounded-lg transition-colors">Удалить</button>
-                    </div>
-                `;
-            }
-
-            return `<div onclick="openGameDetails('${game.slug}')" class="relative game-card fade-in bg-gray-800 rounded-2xl overflow-hidden shadow-lg border border-gray-700 flex flex-col cursor-pointer group">
-                    <div class="overflow-hidden h-48"><img src="${game.image_url}" class="w-full h-full object-cover border-b border-gray-700 group-hover:scale-105 transition-transform duration-500"></div>
-                    <div class="p-5 flex flex-col flex-grow">
-                        <div class="flex justify-between items-start mb-1">
-                            <h2 class="text-xl font-bold leading-tight pr-2">${game.name}</h2>
-                            <div class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full font-bold text-sm border-2 ${scoreClass}">${scoreText}</div>
+            return `<div onclick="openGameDetails('${game.slug}')" class="game-card bg-[#202020] rounded border border-gray-800 flex flex-col cursor-pointer group overflow-hidden">
+                    <div class="h-40 overflow-hidden bg-[#151515]"><img src="${game.image_url}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90 group-hover:opacity-100" loading="lazy"></div>
+                    <div class="p-4 flex flex-col flex-grow">
+                        <div class="flex justify-between items-start">
+                            <h2 class="text-lg font-bold leading-tight pr-2 text-white">${game.name}</h2>
+                            <div class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded font-bold text-xs border ${scoreClass}">${scoreText}</div>
                         </div>
-                        ${extraControls}
                     </div></div>`;
         }
 
-        // --- ИЗМЕНЕНИЕ СТАТУСА ---
-        async function updateGameStatus(slug, newStatus) {
+        async function loadGames(reset = false) {
+            if (isFetching || (!hasMoreGames && !reset)) return;
+            isFetching = true;
+            if (reset) { currentPage = 1; hasMoreGames = true; document.getElementById('gamesGrid').innerHTML = ''; window.scrollTo(0,0); }
+            
+            document.getElementById('loadingIndicator').classList.remove('hidden');
             try {
-                const res = await fetch(`${API_BASE}/api/favorites/${slug}/status`, {
-                    method: 'PATCH', headers: getHeaders(), body: JSON.stringify({ status: newStatus })
-                });
-                if(res.ok) showToast("Статус обновлен!");
-            } catch (e) { showToast("Ошибка обновления", true); }
+                const endpoint = currentSearchQuery 
+                    ? `/api/search?query=${currentSearchQuery}&page=${currentPage}` 
+                    : `/api/top-games?page=${currentPage}&page_size=16`;
+                const res = await fetch(`${API_BASE}${endpoint}`);
+                const games = await res.json();
+                
+                if (games.error) {
+                    if(reset) document.getElementById('gamesGrid').innerHTML = `<div class="col-span-full text-center text-gray-500">${games.error}</div>`;
+                    hasMoreGames = false;
+                } else if (games.length === 0) {
+                    hasMoreGames = false;
+                } else {
+                    const grid = document.getElementById('gamesGrid');
+                    games.forEach(g => grid.innerHTML += createGameCardHTML(g));
+                    currentPage++;
+                }
+            } catch(e) {}
+            isFetching = false;
+            document.getElementById('loadingIndicator').classList.add('hidden');
         }
 
-        // --- ЛОГИКА ГАЛЕРЕИ ---
-        function openLightbox(index) {
-            currentScreenshotIndex = index; const lb = document.getElementById('lightbox'); const lbImg = document.getElementById('lightboxImage');
-            updateLightboxContent(); lb.classList.remove('hidden'); setTimeout(() => { lb.classList.remove('opacity-0'); lbImg.classList.remove('lightbox-img-enter'); lbImg.classList.add('lightbox-img-active'); }, 10);
+        function startSearch() {
+            currentSearchQuery = document.getElementById('gameInput').value.trim();
+            document.getElementById('mainSubtitle').textContent = currentSearchQuery ? `ПОИСК: ${currentSearchQuery}` : "ПОПУЛЯРНОЕ";
+            loadGames(true);
+        }
+
+        window.addEventListener('scroll', () => {
+            if (currentView === 'main' && window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
+                loadGames();
+            }
+        });
+
+        // --- ДЕТАЛИ ИГРЫ ---
+        async function openGameDetails(slug) {
+            hideAllViews(); currentView = 'detail';
+            document.getElementById('detailView').classList.remove('hidden'); window.scrollTo(0, 0);
+            
+            document.getElementById('detailTitle').textContent = "Загрузка...";
+            document.getElementById('screenshotsBlock').classList.add('hidden');
+            document.getElementById('steamReviewsBlock').classList.add('hidden');
+            document.getElementById('gameForumList').innerHTML = '<span class="text-gray-500 text-sm">Загрузка обсуждений...</span>';
+            
+            try {
+                // Загружаем инфу об игре
+                const res = await fetch(`${API_BASE}/api/games/${slug}`);
+                const game = await res.json();
+                if(game.error) return returnToMain();
+
+                currentGameData = { slug, name: game.name, image_url: game.image_url, metacritic_score: game.metacritic_score };
+                
+                document.getElementById('detailTitle').textContent = game.name;
+                document.getElementById('detailImage').src = game.image_url;
+                document.getElementById('detailDate').textContent = `Релиз: ${game.release_date || '---'}`;
+                document.getElementById('detailDevelopers').textContent = `Студия: ${game.developers?.join(', ') || '---'}`;
+                document.getElementById('detailDescription').textContent = game.description || 'Описание отсутствует.';
+                
+                const metaScore = document.getElementById('detailMeta');
+                metaScore.textContent = game.metacritic_score || '-';
+                metaScore.className = `flex-shrink-0 flex items-center justify-center w-16 h-16 rounded font-black text-2xl border-2 bg-[#151515] ${getScoreColorClass(game.metacritic_score)}`;
+
+                // Отрисовка кнопки Избранного
+                const favBtn = document.getElementById('btnFavorite');
+                if (favoriteSlugs.has(slug)) {
+                    favBtn.className = "px-6 py-3 bg-[#43A047] text-white rounded font-black uppercase tracking-wider text-sm flex items-center gap-2 cursor-default";
+                    favBtn.innerHTML = "✓ НА ПОЛКЕ";
+                } else {
+                    favBtn.className = "px-6 py-3 bg-white text-black hover:bg-gray-200 rounded font-black transition-colors uppercase tracking-wider text-sm flex items-center gap-2";
+                    favBtn.innerHTML = "+ ДОБАВИТЬ В КОЛЛЕКЦИЮ";
+                }
+
+                // Скриншоты
+                const scrCont = document.getElementById('screenshotsContainer'); scrCont.innerHTML = '';
+                if (game.screenshots?.length > 0) {
+                    currentScreenshots = game.screenshots;
+                    game.screenshots.forEach((img, idx) => {
+                        scrCont.innerHTML += `<img src="${img}" class="w-full h-24 md:h-32 object-cover rounded cursor-pointer opacity-80 hover:opacity-100 transition-opacity" onclick="openLightbox(${idx})">`;
+                    });
+                    document.getElementById('screenshotsBlock').classList.remove('hidden');
+                }
+
+                // Steam Отзывы
+                const revCont = document.getElementById('steamReviewsContainer'); revCont.innerHTML = '';
+                if (game.steam_reviews?.length > 0) {
+                    game.steam_reviews.forEach(rev => {
+                        const isGood = rev.voted_up; const icon = isGood ? '👍' : '👎'; const color = isGood ? 'text-[#43A047]' : 'text-red-500';
+                        revCont.innerHTML += `<div class="bg-[#151515] p-4 rounded border border-gray-800"><div class="font-bold mb-2 ${color} text-sm">${icon} ${isGood ? 'Рекомендую' : 'Не рекомендую'}</div><p class="text-gray-400 text-xs italic">"${rev.review}"</p></div>`;
+                    });
+                    document.getElementById('steamReviewsBlock').classList.remove('hidden');
+                }
+
+                // Загружаем треды для игры
+                loadGameThreads(slug);
+
+            } catch (e) { returnToMain(); }
+        }
+
+        async function addToFavorites() {
+            if (!localStorage.getItem('token')) { showToast("Войдите в аккаунт!", true); return openAuthModal('login'); }
+            if (!currentGameData || favoriteSlugs.has(currentGameData.slug)) return; // Уже добавлено
+
+            try {
+                const res = await fetch(`${API_BASE}/api/favorites`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(currentGameData) });
+                const result = await res.json();
+                if (res.status === 401) { logout(); return; }
+                if (result.error) showToast(result.error, true);
+                else { 
+                    showToast(result.message); 
+                    favoriteSlugs.add(currentGameData.slug); // Кэшируем
+                    const favBtn = document.getElementById('btnFavorite');
+                    favBtn.className = "px-6 py-3 bg-[#43A047] text-white rounded font-black uppercase tracking-wider text-sm flex items-center gap-2 cursor-default";
+                    favBtn.innerHTML = "✓ НА ПОЛКЕ";
+                }
+            } catch (e) { showToast("Ошибка БД", true); }
+        }
+
+        // --- КАБИНЕТ (МОЯ КОЛЛЕКЦИЯ) ---
+        async function loadCabinet() {
+            if (!localStorage.getItem('token')) { showToast("Войдите в аккаунт", true); return openAuthModal('login'); }
+            hideAllViews(); currentView = 'cabinet';
+            document.getElementById('cabinetView').classList.remove('hidden');
+            
+            document.getElementById('cabinetUsername').textContent = localStorage.getItem('username');
+            document.getElementById('cabinetAvatar').src = localStorage.getItem('avatar_url') || `https://api.dicebear.com/7.x/bottts/svg?seed=${localStorage.getItem('username')}`;
+            const grid = document.getElementById('cabinetGrid'); grid.innerHTML = '<div class="text-gray-500">Загрузка...</div>';
+
+            try {
+                const res = await fetch(`${API_BASE}/api/favorites`, { headers: getHeaders() });
+                if (res.status === 401) return logout();
+                const games = await res.json();
+                document.getElementById('cabinetTotalGames').textContent = games.length;
+
+                if (games.length === 0) { grid.innerHTML = '<div class="text-gray-500">Коллекция пуста.</div>'; return; }
+                
+                grid.innerHTML = '';
+                games.forEach(game => {
+                    grid.innerHTML += `
+                    <div class="bg-[#202020] rounded border border-gray-800 flex flex-col md:flex-row overflow-hidden cursor-pointer hover:border-gray-600 transition-colors" onclick="openGameDetails('${game.slug}')">
+                        <img src="${game.image_url}" class="w-full md:w-32 h-32 object-cover opacity-90">
+                        <div class="p-4 flex-grow flex flex-col justify-between">
+                            <h3 class="text-lg font-bold text-white mb-2 leading-tight">${game.name}</h3>
+                            <div class="flex justify-between items-center" onclick="event.stopPropagation()">
+                                <select onchange="updateGameStatus('${game.slug}', this.value)" class="bg-[#151515] border border-gray-700 text-gray-300 text-xs rounded px-2 py-1 focus:outline-none focus:border-white cursor-pointer font-bold uppercase">
+                                    <option value="В планах" ${game.status === 'В планах' ? 'selected' : ''}>⏳ В планах</option>
+                                    <option value="Играю" ${game.status === 'Играю' ? 'selected' : ''}>🔥 Играю</option>
+                                    <option value="Пройдено" ${game.status === 'Пройдено' ? 'selected' : ''}>🏆 Пройдено</option>
+                                    <option value="Брошено" ${game.status === 'Брошено' ? 'selected' : ''}>💔 Брошено</option>
+                                </select>
+                                <button onclick="removeFromFavorites('${game.slug}')" class="text-red-500 hover:text-red-400 text-xs font-bold uppercase tracking-wider ml-2">Удалить</button>
+                            </div>
+                        </div>
+                    </div>`;
+                });
+            } catch (e) { grid.innerHTML = 'Ошибка загрузки.'; }
+        }
+
+        async function updateGameStatus(slug, newStatus) {
+            try { await fetch(`${API_BASE}/api/favorites/${slug}/status`, { method: 'PATCH', headers: getHeaders(), body: JSON.stringify({ status: newStatus }) }); showToast("Статус изменен"); } 
+            catch (e) { showToast("Ошибка", true); }
+        }
+        async function removeFromFavorites(slug) {
+            try { 
+                await fetch(`${API_BASE}/api/favorites/${slug}`, { method: 'DELETE', headers: getHeaders() }); 
+                favoriteSlugs.delete(slug); showToast("Удалено"); loadCabinet(); 
+            } 
+            catch (e) { showToast("Ошибка", true); }
+        }
+
+        // --- ФОРУМ (ГЛОБАЛЬНЫЙ И ЛОКАЛЬНЫЙ) ---
+        async function loadGlobalForum() {
+            hideAllViews(); currentView = 'globalForum';
+            document.getElementById('globalForumView').classList.remove('hidden');
+            const list = document.getElementById('globalForumList'); list.innerHTML = '<div class="text-gray-500">Загрузка...</div>';
+            try {
+                const res = await fetch(`${API_BASE}/api/forum/recent`);
+                const threads = await res.json();
+                if(threads.length === 0) { list.innerHTML = '<div class="text-gray-500">Пока нет обсуждений.</div>'; return; }
+                list.innerHTML = '';
+                threads.forEach(t => {
+                    list.innerHTML += `
+                    <div onclick="openThread(${t.id}, '${t.title}')" class="bg-[#202020] p-4 rounded border border-gray-800 hover:border-gray-500 cursor-pointer transition-colors">
+                        <h3 class="text-white font-bold text-lg mb-1">${t.title}</h3>
+                        <p class="text-[#43A047] text-xs font-black uppercase tracking-wider mb-2">Игра: ${t.game_slug}</p>
+                        <p class="text-gray-500 text-xs">Автор: ${t.author} &bull; Ответов: ${t.messages_count}</p>
+                    </div>`;
+                });
+            } catch(e) { list.innerHTML = 'Ошибка'; }
+        }
+
+        async function loadGameThreads(slug) {
+            const list = document.getElementById('gameForumList');
+            try {
+                const res = await fetch(`${API_BASE}/api/forum/${slug}`);
+                const threads = await res.json();
+                if(threads.length === 0) { list.innerHTML = '<span class="text-gray-500 text-sm">Никто еще не обсуждал эту игру.</span>'; return; }
+                list.innerHTML = '';
+                threads.forEach(t => {
+                    list.innerHTML += `
+                    <div onclick="openThread(${t.id}, '${t.title}')" class="bg-[#151515] p-3 rounded border border-gray-800 hover:border-gray-600 cursor-pointer transition-colors">
+                        <h4 class="text-white font-bold text-sm mb-1">${t.title}</h4>
+                        <span class="text-gray-500 text-xs">Автор: ${t.author} &bull; Ответов: ${t.messages_count}</span>
+                    </div>`;
+                });
+            } catch(e) { list.innerHTML = '<span class="text-red-500 text-sm">Ошибка загрузки</span>'; }
+        }
+
+        function returnToGlobalForum() {
+            if(currentGameData) { openGameDetails(currentGameData.slug); } 
+            else { loadGlobalForum(); }
+        }
+
+        let currentThreadId = null;
+        async function openThread(id, title) {
+            hideAllViews(); currentView = 'thread'; currentThreadId = id;
+            document.getElementById('threadView').classList.remove('hidden');
+            document.getElementById('threadTitle').textContent = title;
+            document.getElementById('replyInput').value = '';
+            loadThreadMessages();
+        }
+
+        async function loadThreadMessages() {
+            const list = document.getElementById('threadMessages'); list.innerHTML = '<span class="text-gray-500">Загрузка...</span>';
+            try {
+                const res = await fetch(`${API_BASE}/api/forum/thread/${currentThreadId}`);
+                const msgs = await res.json();
+                list.innerHTML = '';
+                msgs.forEach(m => {
+                    list.innerHTML += `
+                    <div class="bg-[#202020] p-4 rounded border border-gray-800 flex gap-4">
+                        <img src="${m.avatar_url}" class="w-10 h-10 rounded object-cover flex-shrink-0 opacity-80">
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-white font-bold text-sm">${m.author}</span>
+                                <span class="text-gray-600 text-xs">${m.created_at.substring(0,10)}</span>
+                            </div>
+                            <p class="text-gray-300 text-sm leading-relaxed">${m.content}</p>
+                        </div>
+                    </div>`;
+                });
+            } catch(e) {}
+        }
+
+        async function submitReply() {
+            if (!localStorage.getItem('token')) { return showToast("Нужна авторизация", true); }
+            const input = document.getElementById('replyInput'); const text = input.value.trim();
+            if(!text) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/forum/message`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ thread_id: currentThreadId, content: text }) });
+                const data = await res.json();
+                if(data.error) showToast(data.error, true);
+                else { input.value = ''; loadThreadMessages(); }
+            } catch(e) { showToast("Ошибка", true); }
+        }
+
+        function openThreadModal() {
+            if (!localStorage.getItem('token')) { showToast("Сначала войдите в профиль!", true); openAuthModal('login'); return; }
+            document.getElementById('threadModal').classList.remove('hidden');
+        }
+        function closeThreadModal() { document.getElementById('threadModal').classList.add('hidden'); }
+        async function submitNewThread() {
+            const title = document.getElementById('newThreadTitle').value.trim();
+            const msg = document.getElementById('newThreadMessage').value.trim();
+            if(!title || !msg) return showToast("Заполните поля", true);
+            try {
+                const res = await fetch(`${API_BASE}/api/forum/thread`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ game_slug: currentGameData.slug, title: title, message: msg }) });
+                const data = await res.json();
+                if(data.error) showToast(data.error, true);
+                else { closeThreadModal(); showToast(data.message); loadGameThreads(currentGameData.slug); }
+            } catch(e) { showToast("Ошибка", true); }
+        }
+
+        // --- ЛАЙТБОКС (ГАЛЕРЕЯ) ---
+        function openLightbox(idx) {
+            currentScreenshotIndex = idx; const lb = document.getElementById('lightbox'); const lbImg = document.getElementById('lightboxImage');
+            updateLightbox(); lb.classList.remove('hidden'); setTimeout(() => { lb.classList.remove('opacity-0'); lbImg.classList.remove('lightbox-img-enter'); lbImg.classList.add('lightbox-img-active'); }, 10);
             document.body.style.overflow = 'hidden'; 
         }
         function closeLightbox() {
@@ -315,162 +597,16 @@
             lb.classList.add('opacity-0'); lbImg.classList.remove('lightbox-img-active'); lbImg.classList.add('lightbox-img-enter');
             setTimeout(() => { lb.classList.add('hidden'); document.body.style.overflow = ''; }, 300);
         }
-        function prevScreenshot(e) { if (e) e.stopPropagation(); currentScreenshotIndex = (currentScreenshotIndex - 1 + currentScreenshots.length) % currentScreenshots.length; updateLightboxContent(); }
-        function nextScreenshot(e) { if (e) e.stopPropagation(); currentScreenshotIndex = (currentScreenshotIndex + 1) % currentScreenshots.length; updateLightboxContent(); }
-        function updateLightboxContent() {
+        function prevScreenshot(e) { if(e) e.stopPropagation(); currentScreenshotIndex = (currentScreenshotIndex - 1 + currentScreenshots.length) % currentScreenshots.length; updateLightbox(); }
+        function nextScreenshot(e) { if(e) e.stopPropagation(); currentScreenshotIndex = (currentScreenshotIndex + 1) % currentScreenshots.length; updateLightbox(); }
+        function updateLightbox() {
             const lbImg = document.getElementById('lightboxImage'); lbImg.style.opacity = '0.5'; setTimeout(() => lbImg.style.opacity = '1', 50);
             lbImg.src = currentScreenshots[currentScreenshotIndex]; document.getElementById('lightboxCounter').textContent = `${currentScreenshotIndex + 1} / ${currentScreenshots.length}`;
         }
         document.addEventListener('keydown', (e) => { const lb = document.getElementById('lightbox'); if (!lb.classList.contains('hidden')) { if (e.key === 'Escape') closeLightbox(); if (e.key === 'ArrowLeft') prevScreenshot(); if (e.key === 'ArrowRight') nextScreenshot(); } });
 
-        // --- ОСНОВНЫЕ ФУНКЦИИ ---
-        function returnToMain() {
-            document.getElementById('detailView').classList.add('hidden');
-            document.getElementById('cabinetHeader').classList.add('hidden');
-            document.getElementById('mainView').classList.remove('hidden');
-            document.getElementById('searchBlock').classList.remove('hidden');
-            loadTopGames();
-        }
-
-        async function loadTopGames() {
-            document.getElementById('mainSubtitle').textContent = "Популярные игры и оценки критиков";
-            const grid = document.getElementById('gamesGrid'); grid.innerHTML = '';
-            document.getElementById('statusMessage').textContent = 'Загружаем...'; document.getElementById('statusMessage').classList.remove('hidden');
-            const res = await fetch(`${API_BASE}/api/top-games`);
-            const games = await res.json();
-            games.forEach(g => grid.innerHTML += createGameCardHTML(g));
-            document.getElementById('statusMessage').classList.add('hidden');
-        }
-
-        async function searchGame() {
-            const input = document.getElementById('gameInput').value.trim();
-            if (!input) return loadTopGames();
-            document.getElementById('statusMessage').textContent = 'Ищем...'; document.getElementById('statusMessage').classList.remove('hidden');
-            const grid = document.getElementById('gamesGrid'); grid.innerHTML = ''; 
-            const res = await fetch(`${API_BASE}/api/search?query=${input}`);
-            const games = await res.json();
-            if (games.error) return document.getElementById('statusMessage').textContent = games.error;
-            games.forEach(g => grid.innerHTML += createGameCardHTML(g));
-            document.getElementById('statusMessage').textContent = `Результаты по запросу "${input}"`; document.getElementById('statusMessage').className = 'text-center font-semibold mb-8 text-xl text-green-400';
-        }
-
-        async function openGameDetails(slug) {
-            document.getElementById('mainView').classList.add('hidden'); document.getElementById('cabinetHeader').classList.add('hidden');
-            document.getElementById('statusMessage').textContent = 'Загружаем информацию, скриншоты и отзывы...'; 
-            document.getElementById('statusMessage').className = 'text-center font-semibold mb-8 text-xl text-purple-400 fade-in'; 
-            document.getElementById('statusMessage').classList.remove('hidden');
-            
-            try {
-                const res = await fetch(`${API_BASE}/api/games/${slug}`);
-                const game = await res.json();
-                if(game.error) return document.getElementById('statusMessage').textContent = game.error;
-
-                currentGameData = { slug, name: game.name, image_url: game.image_url, metacritic_score: game.metacritic_score };
-
-                document.getElementById('detailTitle').textContent = game.name; document.getElementById('detailImage').src = game.image_url; document.getElementById('detailDate').textContent = `Дата выхода: ${game.release_date || 'Неизвестна'}`;
-                document.getElementById('detailDevelopers').textContent = `Студия: ${game.developers && game.developers.length ? game.developers.join(', ') : 'Неизвестно'}`;
-                document.getElementById('detailDescription').textContent = game.description || 'Описание отсутствует.';
-
-                const reqSection = document.getElementById('pcRequirements');
-                if (game.pc_minimum !== "Нет данных" || game.pc_recommended !== "Нет данных") {
-                    document.getElementById('detailReqMin').textContent = game.pc_minimum.replace(/Minimum:/gi, '').trim(); document.getElementById('detailReqRec').textContent = game.pc_recommended.replace(/Recommended:/gi, '').trim();
-                    reqSection.classList.remove('hidden');
-                } else reqSection.classList.add('hidden'); 
-
-                const scrBlock = document.getElementById('screenshotsBlock'); const scrCont = document.getElementById('screenshotsContainer'); scrCont.innerHTML = '';
-                if (game.screenshots && game.screenshots.length > 0) {
-                    currentScreenshots = game.screenshots; 
-                    game.screenshots.forEach((imgUrl, index) => { scrCont.innerHTML += `<img src="${imgUrl}" class="w-full h-32 object-cover rounded-xl border border-gray-700 hover:border-purple-500 hover:scale-105 transition-all cursor-pointer shadow-lg" onclick="openLightbox(${index})" alt="Скриншот">`; });
-                    scrBlock.classList.remove('hidden');
-                } else { currentScreenshots = []; scrBlock.classList.add('hidden'); }
-
-                const reviewsBlock = document.getElementById('steamReviewsBlock'); const reviewsCont = document.getElementById('steamReviewsContainer'); reviewsCont.innerHTML = ''; 
-                if (game.steam_reviews && game.steam_reviews.length > 0) {
-                    game.steam_reviews.forEach(rev => {
-                        const isGood = rev.voted_up; const icon = isGood ? '👍' : '👎'; const color = isGood ? 'text-green-400' : 'text-red-400'; const borderColor = isGood ? 'border-green-500/30' : 'border-red-500/30';
-                        reviewsCont.innerHTML += `<div class="bg-gray-900/50 p-5 rounded-xl border ${borderColor} shadow-inner"><div class="font-bold mb-3 ${color}">${icon} ${isGood ? 'Рекомендую' : 'Не рекомендую'}</div><p class="text-gray-300 text-sm italic leading-relaxed">"${rev.review}"</p></div>`;
-                    });
-                    reviewsBlock.classList.remove('hidden');
-                } else reviewsBlock.classList.add('hidden');
-
-                const metaScore = document.getElementById('detailMeta'); metaScore.textContent = game.metacritic_score || 'N/A'; metaScore.className = `flex-shrink-0 flex items-center justify-center w-16 h-16 rounded-full font-bold text-2xl border-4 shadow-lg bg-gray-900/50 ${getScoreColorClass(game.metacritic_score)}`;
-                const platCont = document.getElementById('detailPlatforms'); platCont.innerHTML = '';
-                if (game.platforms) game.platforms.forEach(p => platCont.innerHTML += `<span class="px-4 py-1.5 bg-gray-700 text-xs font-semibold rounded-full border border-gray-600 shadow-sm">${p}</span>`);
-
-                const webBtn = document.getElementById('detailWebsite'); if (game.website) { webBtn.href = game.website; webBtn.classList.remove('hidden'); } else webBtn.classList.add('hidden');
-                const metaBtn = document.getElementById('detailMetacritic'); if (game.metacritic_url) { metaBtn.href = game.metacritic_url; metaBtn.classList.remove('hidden'); } else metaBtn.classList.add('hidden');
-
-                const favBtn = document.getElementById('btnFavorite'); favBtn.innerHTML = '<span>🤍</span> Добавить на полку'; favBtn.classList.remove('bg-green-600', 'hover:bg-green-700'); favBtn.classList.add('bg-pink-600', 'hover:bg-pink-700');
-
-                document.getElementById('statusMessage').classList.add('hidden'); document.getElementById('detailView').classList.remove('hidden'); window.scrollTo({ top: 0, behavior: 'smooth' });
-            } catch (e) { document.getElementById('statusMessage').textContent = 'Ошибка загрузки.'; }
-        }
-
-        async function addToFavorites() {
-            if (!localStorage.getItem('token')) { showToast("Сначала войдите в аккаунт!", true); openAuthModal('login'); return; }
-            if (!currentGameData) return;
-            const btn = document.getElementById('btnFavorite'); btn.classList.add('heart-pop'); setTimeout(() => btn.classList.remove('heart-pop'), 300);
-
-            try {
-                const res = await fetch(`${API_BASE}/api/favorites`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(currentGameData) });
-                const result = await res.json();
-                if (res.status === 401) { logout(); return showToast("Сессия истекла. Войдите снова", true); }
-                if (result.error) showToast(result.error, true);
-                else { showToast(result.message); btn.innerHTML = '<span>❤️</span> На вашей полке'; btn.classList.remove('bg-pink-600', 'hover:bg-pink-700'); btn.classList.add('bg-green-600', 'hover:bg-green-700'); }
-            } catch (e) { showToast("Ошибка БД", true); }
-        }
-
-        async function loadCabinet() {
-            if (!localStorage.getItem('token')) { showToast("Войдите в аккаунт", true); openAuthModal('login'); return; }
-            closeGameDetails(); 
-            
-            document.getElementById('searchBlock').classList.add('hidden'); 
-            document.getElementById('cabinetHeader').classList.remove('hidden');
-            document.getElementById('mainSubtitle').textContent = "Ваша игровая полка"; 
-            document.getElementById('statusMessage').textContent = 'Загружаем...'; 
-            document.getElementById('statusMessage').classList.remove('hidden');
-            
-            // Заполняем профиль
-            document.getElementById('cabinetUsername').textContent = localStorage.getItem('username');
-            document.getElementById('cabinetAvatar').src = localStorage.getItem('avatar_url') || `https://api.dicebear.com/7.x/bottts/svg?seed=${localStorage.getItem('username')}`;
-            
-            const grid = document.getElementById('gamesGrid'); grid.innerHTML = '';
-
-            try {
-                const res = await fetch(`${API_BASE}/api/favorites`, { headers: getHeaders() });
-                if (res.status === 401) { logout(); return showToast("Войдите в аккаунт", true); }
-                const games = await res.json();
-                
-                document.getElementById('cabinetTotalGames').textContent = games.length;
-
-                if (games.length === 0) { document.getElementById('statusMessage').textContent = 'Ваша полка пока пуста. Добавьте первую игру!'; document.getElementById('statusMessage').className = 'text-center font-semibold mb-8 text-xl text-gray-400'; return; }
-                
-                // Передаем true, чтобы отрисовались выпадающие списки статусов
-                games.forEach(g => grid.innerHTML += createGameCardHTML(g, true)); 
-                document.getElementById('statusMessage').classList.add('hidden');
-            } catch (e) { document.getElementById('statusMessage').textContent = 'Ошибка загрузки.'; }
-        }
-
-        async function removeFromFavorites(slug) {
-            try {
-                const res = await fetch(`${API_BASE}/api/favorites/${slug}`, { method: 'DELETE', headers: getHeaders() });
-                const result = await res.json();
-                if (res.status === 401) return logout();
-                showToast(result.message); loadCabinet();
-            } catch (e) { showToast("Ошибка", true); }
-        }
-
-        function closeGameDetails() {
-            document.getElementById('detailView').classList.add('hidden'); 
-            document.getElementById('mainView').classList.remove('hidden'); 
-            document.getElementById('statusMessage').classList.add('hidden'); 
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        window.onload = () => { checkAuth(); loadTopGames(); };
+        // Старт
+        window.onload = () => { checkAuth(); loadGames(true); };
     </script>
 </body>
-
 </html>
-
-
